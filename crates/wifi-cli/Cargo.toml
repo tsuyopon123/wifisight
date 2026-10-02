@@ -1,0 +1,17 @@
+[package]
+name = "wifi-cli"
+description = "Headless Wi-Fi scanner / logger (wifisight-cli)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "wifisight-cli"
+path = "src/main.rs"
+
+[dependencies]
+wifi-core.workspace = true
+wifi-scan.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+clap = { version = "4", features = ["derive"] }

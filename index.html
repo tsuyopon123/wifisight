@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WiFiSight</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <div class="tb-main">
+        <div class="seg" id="mode-seg" role="group" aria-label="Mode">
+          <button data-mode="scanner" class="on" aria-pressed="true" title="Scanner (⌘1 / Ctrl+1)">Scanner</button>
+          <button data-mode="survey" aria-pressed="false" title="Survey (⌘2 / Ctrl+2)">Survey</button>
+        </div>
+        <button id="btn-run" class="primary" title="Start / pause scanning (Space)">Pause</button>
+        <label class="field">Interval
+          <select id="sel-interval">
+            <option value="2000">2 s</option>
+            <option value="5000" selected>5 s</option>
+            <option value="10000">10 s</option>
+            <option value="30000">30 s</option>
+          </select>
+        </label>
+        <div class="seg" id="band-filter" role="group" aria-label="Band filter">
+          <button data-band="2.4" class="on" aria-pressed="true">2.4</button>
+          <button data-band="5" class="on" aria-pressed="true">5</button>
+          <button data-band="6" class="on" aria-pressed="true">6</button>
+        </div>
+        <input id="filter" type="search" aria-label="Filter (see Help for the syntax)" placeholder="Filter  ch:36, sec:wpa3, band:6 …" title="Free text matches SSID / BSSID / vendor / AP. Keys: ch: band: sec: ssid: vendor: ap: phy: w: rssi:. Comma = OR. Help (?) lists them all." />
+        <label class="check" title="Include networks that hide their SSID"><input type="checkbox" id="chk-hidden" checked /> hidden SSIDs</label>
+        <label class="check scanner-only"><input type="checkbox" id="chk-stale" /> only current</label>
+        <label class="check scanner-only"><input type="checkbox" id="chk-charts" checked /> charts</label>
+      </div>
+      <div class="tb-end">
+        <div class="menu scanner-only">
+          <button id="btn-menu" aria-controls="menu-pop" aria-expanded="false">Export ▾</button>
+          <div class="menu-pop" id="menu-pop" hidden>
+            <button id="btn-csv">Table as CSV…</button>
+            <button id="btn-json">Session log (JSON)…</button>
+            <hr />
+            <button id="btn-clear" class="danger">Clear session…</button>
+          </div>
+        </div>
+        <button id="btn-settings" class="icon-label">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+          Settings
+        </button>
+        <button id="btn-help" class="icon-label" title="Keyboard shortcuts and filter syntax (?)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+          Help
+        </button>
+      </div>
+    </header>
+    <div id="notice" class="notice" role="status" hidden></div>
+
+    <main id="main">
+      <section id="table-wrap" tabindex="0" aria-label="BSS list. Up and down arrows select a row.">
+        <table id="bss-table">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+        <div id="empty" class="empty" hidden></div>
+      </section>
+      <div class="menu-pop" id="col-pop" hidden></div>
+      <div id="splitter" title="Drag to resize"></div>
+      <section id="bottom">
+        <div id="chart-pane">
+          <nav class="tabs" id="tabs">
+            <button data-tab="signal" class="on" aria-pressed="true">Signal</button>
+            <button data-tab="2.4" aria-pressed="false">2.4 GHz</button>
+            <button data-tab="5" aria-pressed="false">5 GHz</button>
+            <button data-tab="6" aria-pressed="false">6 GHz</button>
+            <button data-tab="load" aria-pressed="false">Utilization</button>
+            <div class="spacer"></div>
+            <label class="field small" id="history-field">History
+              <select id="sel-history">
+                <option value="60000">1 min</option>
+                <option value="300000" selected>5 min</option>
+                <option value="900000">15 min</option>
+                <option value="3600000">60 min</option>
+              </select>
+            </label>
+          </nav>
+          <div class="canvas-wrap"><canvas id="chart"></canvas><div id="tooltip" hidden></div></div>
+        </div>
+      </section>
+      <aside id="details" hidden></aside>
+    </main>
+
+    <main id="survey" hidden>
+      <div class="canvas-wrap" id="sv-map">
+        <canvas id="sv-canvas"></canvas>
+        <div id="sv-tip" class="tooltip" hidden></div>
+        <div id="sv-zoom" class="sv-zoom" hidden>
+          <button id="sv-hand" class="icon-label" title="Hand tool: drag to pan, clicks don't add points (H). Two-finger swipe / middle-drag pans anytime, pinch or ⌘+wheel zooms." aria-label="Hand tool" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0v5"/><path d="M14 10V4a2 2 0 0 0-4 0v6"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>
+          </button>
+          <button id="sv-zoom-out" title="Zoom out (−)" aria-label="Zoom out">−</button>
+          <button id="sv-zoom-fit" title="Fit (0)" aria-label="Fit to window">100%</button>
+          <button id="sv-zoom-in" title="Zoom in (+)" aria-label="Zoom in">+</button>
+        </div>
+        <div id="sv-status" role="status" aria-live="polite" hidden></div>
+        <div id="sv-toast" role="status" aria-live="polite" hidden></div>
+        <div id="sv-empty" class="empty"><div><p>Open a floor plan image (PNG / JPEG), then click where you stand to measure.</p><button id="sv-empty-open" class="primary">New from floor plan…</button></div></div>
+      </div>
+      <div id="sv-splitter" title="Drag to resize (double-click to reset)"></div>
+      <aside id="sv-side">
+        <div class="sv-buttons">
+          <button id="sv-open-plan">New from floor plan…</button>
+          <button id="sv-open">Open…</button>
+          <button id="sv-save">Save…</button>
+          <button id="sv-export">Export PNG…</button>
+          <span id="sv-saved" class="sv-saved" role="status"></span>
+        </div>
+        <section class="sv-sec">
+          <h4>Measure</h4>
+          <label class="sv-row"><span>Scans / point</span>
+            <span class="sv-ctl">
+              <select id="sv-n">
+                <option value="1">1</option>
+                <option value="3" selected>3</option>
+                <option value="5">5</option>
+              </select>
+              <span id="sv-eta" class="sv-eta" title="Scans / point × the scan interval in the toolbar"></span>
+            </span>
+          </label>
+          <label class="check"><input type="checkbox" id="sv-beep" checked /> Beep when a point is done</label>
+        </section>
+        <section class="sv-sec">
+          <h4 class="sv-h">Points <span id="sv-points-n" class="sv-n"></span></h4>
+          <ol id="sv-points"></ol>
+        </section>
+        <section class="sv-sec">
+          <h4>Heatmap</h4>
+          <label class="sv-row"><span>Layer</span><select id="sv-layer"></select></label>
+          <label class="sv-row"><span>Metric</span>
+            <select id="sv-metric">
+              <option value="signal">Signal (strongest)</option>
+              <option value="second">2nd AP signal (roaming)</option>
+              <option value="cci">Co-channel APs (≥ −82 dBm)</option>
+              <option value="snr">SNR (where noise is reported)</option>
+            </select>
+          </label>
+          <label class="sv-row"><span>Opacity</span><input type="range" id="sv-opacity" min="10" max="90" /></label>
+          <label class="sv-row" title="How far from the nearest measured point the heatmap is painted"><span>Paint radius</span><span class="sv-ctl"><input type="range" id="sv-mask" min="3" max="50" /><span id="sv-mask-v" class="sv-val"></span></span></label>
+        </section>
+        <section class="sv-sec">
+          <h4 class="sv-h">Access points <span id="sv-aps-n" class="sv-n"></span><span class="spacer"></span><button id="sv-ap-cols" title="Show / hide columns (or right-click a header)">Columns ▾</button></h4>
+          <p class="sv-hint">✕ estimated, ◆ placed — drag a marker on the map to place it. Pick an AP to see its BSSIDs under Layer.</p>
+          <table id="sv-aps"></table>
+          <div class="menu-pop" id="sv-col-pop" hidden></div>
+        </section>
+        <details class="sv-sec" id="sv-plan-sec">
+          <summary><h4>Floor plan</h4></summary>
+          <div class="sv-row"><span>Plan lines</span>
+            <span class="sv-ctl"><small>darker</small><input type="range" id="sv-tone" min="-100" max="100" aria-label="Plan lines: darker or fainter" title="Darken the plan's lines or fade them toward white (double-click to reset)" /><small>fainter</small></span>
+          </div>
+          <label class="check"><input type="checkbox" id="sv-gray" /> Black &amp; white</label>
+          <div class="sv-row"><span>Scale</span><span class="sv-ctl"><span id="sv-scale-text" class="sv-val"></span><span class="spacer"></span><button id="sv-scale-set">Set…</button></span></div>
+          <div id="sv-scale-input" class="sv-row" hidden>
+            <label for="sv-scale-m">Distance</label>
+            <span class="sv-ctl"><input type="number" id="sv-scale-m" min="0.1" step="0.1" placeholder="m" /> m
+            <span class="spacer"></span><button id="sv-scale-cancel">Cancel</button><button id="sv-scale-ok" class="primary">Apply</button></span>
+          </div>
+        </details>
+        <input type="file" id="sv-file-plan" accept="image/png,image/jpeg,image/webp" hidden />
+        <input type="file" id="sv-file-proj" accept=".json,application/json" hidden />
+      </aside>
+    </main>
+
+    <footer class="statusbar">
+      <span id="st-platform"></span>
+      <span id="st-scan"></span>
+      <span id="st-count"></span>
+      <span id="st-warn" class="warn"></span>
+    </footer>
+    <dialog id="dlg-settings" aria-labelledby="dlg-settings-title">
+      <form method="dialog">
+        <h2 id="dlg-settings-title">Settings</h2>
+        <div class="settings">
+          <label for="probe">Probe</label>
+          <div>
+            <input id="probe" type="text" placeholder="host:port — empty = this computer" spellcheck="false" />
+            <p class="hint">External probe (<code>wifisight-cli serve</code>), e.g. wifiprobe.local:8737. Empty = this computer's Wi-Fi.</p>
+          </div>
+          <label for="sel-iface">Interface</label>
+          <select id="sel-iface"></select>
+          <span>Vendor DB</span>
+          <div>
+            <button type="button" id="btn-oui">Update from IEEE OUI</button>
+            <p class="hint" id="oui-status"></p>
+          </div>
+          <label for="sel-theme">Theme</label>
+          <div>
+            <select id="sel-theme">
+              <option value="">Follow system</option>
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+            </select>
+          </div>
+          <span class="loc-row">Location</span>
+          <div class="loc-row">
+            <button type="button" id="btn-loc">Request permission</button>
+            <p class="hint">macOS needs it to show SSIDs / BSSIDs.</p>
+          </div>
+        </div>
+        <div class="dlg-actions">
+          <button value="close" class="primary">Done</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="dlg-help" aria-labelledby="dlg-help-title">
+      <form method="dialog">
+        <h2 id="dlg-help-title">Shortcuts &amp; filter</h2>
+        <h3>Everywhere</h3>
+        <dl>
+          <dt><kbd>Space</kbd></dt><dd>Start / pause scanning</dd>
+          <dt><kbd>⌘1</kbd> <kbd>⌘2</kbd></dt><dd>Scanner / Survey (Ctrl on Windows / Linux)</dd>
+          <dt><kbd>?</kbd></dt><dd>This help</dd>
+        </dl>
+        <h3>Scanner</h3>
+        <dl>
+          <dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Select the previous / next BSS</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Close details</dd>
+          <dt><kbd>1</kbd>–<kbd>5</kbd></dt><dd>Signal / 2.4 / 5 / 6 GHz / Utilization</dd>
+        </dl>
+        <h3>Survey</h3>
+        <dl>
+          <dt>Click the map</dt><dd>Add a point and measure where you stand</dd>
+          <dt><kbd>⌘Z</kbd></dt><dd>Undo the last add / move / delete</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Cancel measuring, or deselect</dd>
+          <dt><kbd>R</kbd></dt><dd>Measure the selected point again</dd>
+          <dt><kbd>Del</kbd></dt><dd>Delete the selected point</dd>
+          <dt><kbd>H</kbd></dt><dd>Hand tool (drag pans, clicks don't add points)</dd>
+          <dt><kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd></dt><dd>Zoom in / out / fit</dd>
+        </dl>
+        <h3>Filter (comma = OR)</h3>
+        <dl>
+          <dt>free text</dt><dd>SSID, BSSID, vendor, AP name, security, generation</dd>
+          <dt><code>ch:36</code> <code>band:6</code></dt><dd>Channel (or center channel) / band</dd>
+          <dt><code>sec:wpa3</code></dt><dd>Security label or AKM contains</dd>
+          <dt><code>ssid:techconf</code></dt><dd>SSID, exact match</dd>
+          <dt><code>vendor:</code> <code>ap:</code></dt><dd>Vendor / AP name contains</dd>
+          <dt><code>phy:be</code> <code>w:160</code></dt><dd>PHY mode / channel width (MHz)</dd>
+          <dt><code>rssi:-70</code></dt><dd>Signal at or above (dBm)</dd>
+        </dl>
+        <div class="dlg-actions">
+          <button value="close" class="primary">Done</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="dlg-clear" aria-labelledby="dlg-clear-title">
+      <form method="dialog">
+        <h2 id="dlg-clear-title">Clear session?</h2>
+        <p>All collected BSS and signal history will be discarded. Export first if you need it.</p>
+        <div class="dlg-actions">
+          <button value="cancel" autofocus>Cancel</button>
+          <button value="ok" class="danger-solid">Clear</button>
+        </div>
+      </form>
+    </dialog>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

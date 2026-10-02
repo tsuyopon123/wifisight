@@ -1,0 +1,22 @@
+[package]
+name = "wifisight"
+description = "WiFiSight — cross-platform Wi-Fi scanner for event NOCs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "wifisight_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde.workspace = true
+serde_json.workspace = true
+wifi-core.workspace = true
+wifi-scan.workspace = true
+ureq = "3"

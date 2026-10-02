@@ -1,0 +1,10 @@
+[package]
+name = "wifi-core"
+description = "Platform-independent 802.11 BSS analysis: IE parsing, channel/width, PHY, security, max rate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
