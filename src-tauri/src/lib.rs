@@ -126,7 +126,7 @@ async fn scan(
             let o = wifi_scan::scan(&ScanOptions {
                 interface: iface,
                 trigger: true,
-                wait: true,
+                wait: false,
             })
             .map_err(|e| e.to_string())?;
             (o.interface, o.bss, o.warnings)
