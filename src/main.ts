@@ -10,7 +10,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 
 const state = {
   running: true,
-  intervalMs: 5000,
+  intervalMs: 0,
   iface: null as string | null,
   probe: null as string | null,
   mode: "scanner" as "scanner" | "survey",

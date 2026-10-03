@@ -132,7 +132,9 @@ let img: HTMLImageElement | null = null;
 let layer = "best";
 let metric: Metric = "signal";
 let selectedPoint: string | null = null;
-let scansPerPoint = 3;
+let scansPerPoint = 1;
+let instant = true; // record the latest scan right away instead of waiting for new ones
+let lastSnap: Snapshot | null = null;
 let measuring: {
   id: string;
   isNew: boolean; // cancel removes a point that was never measured
@@ -363,6 +365,7 @@ function beep() {
 
 /** Fed every scan result from main.ts. */
 export function onSnapshot(s: Snapshot) {
+  lastSnap = s;
   if (!project || !measuring) return;
   if (measuring.skip > 0) {
     measuring.skip--; // scan started before the user got to the spot
@@ -415,6 +418,10 @@ function measure(pt: SurveyPoint, isNew = false) {
   measuring = { id: pt.id, isNew, left: scansPerPoint, skip: inFlight ? 1 : 0, fails: 0, err: "", samples: {}, noise: {} };
   stalled = null;
   selectedPoint = pt.id;
+  if (instant && lastSnap) {
+    measuring.skip = 0;
+    return onSnapshot(lastSnap);
+  }
   render();
 }
 
@@ -855,7 +862,7 @@ function renderSide() {
   for (const id of ["sv-save", "sv-export", "sv-scale-set"]) $<HTMLButtonElement>(id).disabled = !project;
   renderSaved();
   const secs = Math.round((scansPerPoint * host.intervalMs()) / 1000);
-  $("sv-eta").textContent = `≈ ${secs} s / point`;
+  $("sv-eta").textContent = instant ? "instant" : `≈ ${secs} s / point`;
   $("sv-aps-n").textContent = $("sv-points-n").textContent = "";
   if (!project) {
     sel.innerHTML = `<option value="best">Best signal</option>`;
@@ -1245,7 +1252,9 @@ export async function init(h: SurveyHost) {
     render();
   };
   $<HTMLSelectElement>("sv-n").onchange = (e) => {
-    scansPerPoint = Number((e.target as HTMLSelectElement).value);
+    const v = Number((e.target as HTMLSelectElement).value);
+    instant = v === 0;
+    scansPerPoint = Math.max(1, v);
     renderSide();
   };
 
@@ -1285,7 +1294,7 @@ export async function init(h: SurveyHost) {
 
   const beepBox = $<HTMLInputElement>("sv-beep");
   try {
-    beepBox.checked = localStorage.getItem("wifisight.beep") !== "0";
+    beepBox.checked = localStorage.getItem("wifisight.beep") === "1";
   } catch {
     /* storage unavailable */
   }
