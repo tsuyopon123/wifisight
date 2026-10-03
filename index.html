@@ -16,8 +16,9 @@
         <button id="btn-run" class="primary" title="Start / pause scanning (Space)">Pause</button>
         <label class="field">Interval
           <select id="sel-interval">
+            <option value="0" selected>Realtime</option>
             <option value="2000">2 s</option>
-            <option value="5000" selected>5 s</option>
+            <option value="5000">5 s</option>
             <option value="10000">10 s</option>
             <option value="30000">30 s</option>
           </select>
@@ -118,14 +119,15 @@
           <label class="sv-row"><span>Scans / point</span>
             <span class="sv-ctl">
               <select id="sv-n">
+                <option value="0" selected>Instant (latest scan)</option>
                 <option value="1">1</option>
-                <option value="3" selected>3</option>
+                <option value="3">3</option>
                 <option value="5">5</option>
               </select>
               <span id="sv-eta" class="sv-eta" title="Scans / point × the scan interval in the toolbar"></span>
             </span>
           </label>
-          <label class="check"><input type="checkbox" id="sv-beep" checked /> Beep when a point is done</label>
+          <label class="check"><input type="checkbox" id="sv-beep" /> Beep when a point is done</label>
         </section>
         <section class="sv-sec">
           <h4 class="sv-h">Points <span id="sv-points-n" class="sv-n"></span></h4>

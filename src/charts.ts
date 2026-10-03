@@ -136,10 +136,12 @@ export class ChartView {
       c.lineJoin = "round";
       c.beginPath();
       let prev: number | null = null;
+      // break the line on gaps (BSS not seen). The floor keeps irregular scans (macOS answers most
+      // requests from its cache in ~50 ms, then a real scan takes seconds) from cutting every line.
+      const gap = Math.max(3 * medianStep(pts), 10000);
       for (const s of pts) {
         const px = xOf(s.t), py = yOf(x, s.rssi);
-        // break the line on gaps (BSS not seen)
-        if (prev === null || s.t - prev > 3 * medianStep(pts)) c.moveTo(px, py);
+        if (prev === null || s.t - prev > gap) c.moveTo(px, py);
         else c.lineTo(px, py);
         prev = s.t;
       }
