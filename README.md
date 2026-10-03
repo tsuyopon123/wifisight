@@ -50,8 +50,8 @@ Download the file for your platform from [Releases](https://github.com/tsuyopon1
 | OS | File |
 |---|---|
 | macOS 11+ (Apple Silicon, Intel) | `.dmg` |
-| Windows 10/11 (x64) | `.msi` or `-setup.exe` |
-| Linux (x64) | `.deb` or `.AppImage` |
+| Windows 10/11 (x64) | `-setup.exe`, or `-portable.exe` to run without installing (needs WebView2, which Windows 11 includes) |
+| Linux (x64, arm64) | `.deb` |
 
 ### First launch
 
@@ -59,7 +59,7 @@ The app is not code-signed, so you'll see a warning the first time.
 
 - **macOS**: copy the app from the `.dmg` to Applications and open it. If it's blocked, click "Open Anyway" in System Settings › Privacy & Security
 - **Windows**: on the SmartScreen dialog, click "More info", then "Run anyway"
-- **Linux**: install the `.deb` with `sudo apt install ./<file>.deb`, or make the `.AppImage` executable with `chmod +x` and run it
+- **Linux**: install the `.deb` with `sudo apt install ./<file>.deb`. Updating works the same way
 
 ### Permissions
 
@@ -69,11 +69,11 @@ Scanning needs the following permissions.
 |---|---|
 | macOS | Location Services. Without it, SSID and BSSID are unavailable. The app asks on first launch. The standalone CLI cannot get BSSIDs |
 | Windows | On Windows 11 24H2 and later, turn on Settings › Privacy & security › Location › "Let desktop apps access your location" |
-| Linux | Triggering a scan needs `CAP_NET_ADMIN`. For a `.deb` install, grant it with `sudo setcap cap_net_admin+ep /usr/bin/wifisight`. Without it, the app asks NetworkManager (`nmcli`) to rescan, and falls back to cached results if that fails too |
+| Linux | Triggering a scan needs `CAP_NET_ADMIN`. For a `.deb` install, grant it with `sudo setcap cap_net_admin+ep /usr/bin/wifisight` (again after each update). Without it, the app asks NetworkManager (`nmcli`) to rescan, and falls back to cached results if that fails too |
 
 ## CLI
 
-`wifisight-cli` is a separate download on the same release page, for `linux-x86_64`, `linux-aarch64` (e.g. Raspberry Pi), `macos-aarch64`, and `windows-x86_64`. Extract the `.tar.gz` (the Windows build is a plain `.exe`) and put the binary on your `PATH`:
+`wifisight-cli` is a separate download on the same release page, for `linux-x86_64`, `linux-aarch64` (e.g. Raspberry Pi), `macos-universal`, and `windows-x86_64`. Extract the `.tar.gz` (the Windows build is a plain `.exe`) and put the binary on your `PATH`:
 
 ```sh
 tar -xzf wifisight-cli-<version>-linux-aarch64.tar.gz
@@ -112,7 +112,7 @@ sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appi
 ```sh
 npm install
 npm run tauri dev     # run in development mode
-npm run tauri build   # build bundles (.app/.dmg, .msi, .deb/.AppImage)
+npm run tauri build   # build bundles (.app/.dmg, -setup.exe, .deb)
 cargo run -p wifi-cli -- scan   # run the CLI
 ```
 
