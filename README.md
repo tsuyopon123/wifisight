@@ -6,7 +6,30 @@ English | [日本語](README.ja.md)
 
 WiFiSight is a Wi-Fi scanner for event NOCs. One tool covers the venue survey, post-setup verification, and monitoring during the event.
 
-It runs on macOS, Windows, and Linux, and shows the same analysis on all of them.
+## Highlights
+
+### AP names, not just BSSIDs
+
+WiFiSight shows the AP name that each AP advertises in its beacons, right in the list.
+No more matching BSSIDs against the controller UI: you can spot a weak or misbehaving AP on the spot.
+It understands the formats used by many enterprise AP vendors.
+
+> [!NOTE]
+> APs only include their name in beacons when the controller or AP is configured to advertise it. Enable the equivalent of Aruba's `advertise-ap-name` on each SSID.
+
+### Let an external probe do the measuring
+
+Run `wifisight-cli serve` on a Raspberry Pi or mini PC and it takes over the measuring.
+Place the probe elsewhere in the venue and monitor the RF there remotely over the LAN.
+
+It also works as a companion device next to you.
+Scanning from a PC that is connected to Wi-Fi is unreliable, because the OS throttles scans.
+The probe stays unassociated and only measures, so every scan runs under the same conditions while your PC stays online over Wi-Fi.
+See [docs/probe.md](docs/probe.md) (Japanese) for details.
+
+### Same analysis on every OS
+
+It runs on macOS, Windows, and Linux. All parsing happens in the shared `wifi-core`, so the results are the same everywhere.
 
 ![screenshot](docs/screenshot.png)
 
@@ -14,7 +37,7 @@ It runs on macOS, Windows, and Linux, and shows the same analysis on all of them
 
 - **Scanner**: lists nearby BSSes with SSID, BSSID, vendor, AP name, channel and width, RSSI, noise, SNR, security, PHY, NSS, max PHY rate, client count, channel utilization, 11k/v/r, and country code. Also shows signal history, a 2.4/5/6 GHz spectrum, per-channel utilization, and every IE decoded
 - **Survey**: click your position on a floor plan to take a measurement; the app draws heatmaps and estimates AP locations. Surveys are saved as `*.survey.json`
-- **External probe**: measure from a separate device such as a mini PC or Raspberry Pi. Measurements stay stable regardless of the PC's own traffic, and the PC's Wi-Fi stays connected to the internet. See [docs/probe.md](docs/probe.md) (Japanese)
+- **External probe**: measure from a separate device. See [docs/probe.md](docs/probe.md) (Japanese)
 - **CLI**: the same analysis as the GUI, as a table, JSON, or a JSONL log
 - **Export**: CSV and JSON
 
