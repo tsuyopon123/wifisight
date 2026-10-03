@@ -32,6 +32,13 @@ jobs:
         run: cargo clippy -p wifi-core -p wifi-scan -p wifi-cli
       - name: Build CLI
         run: cargo build -p wifi-cli --release
+      - name: Universal CLI (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          rustup target add x86_64-apple-darwin
+          cargo build -p wifi-cli --release --target x86_64-apple-darwin
+          lipo -create target/release/wifisight-cli target/x86_64-apple-darwin/release/wifisight-cli -output wifisight-cli-universal
+          mv wifisight-cli-universal target/release/wifisight-cli
       - uses: actions/upload-artifact@v7
         with:
           name: wifisight-cli-${{ matrix.os }}
@@ -39,22 +46,24 @@ jobs:
             target/release/wifisight-cli
             target/release/wifisight-cli.exe
 
-  # GUI bundles: .dmg/.app (macOS), .msi/.exe (Windows), .deb/.AppImage (Linux)
+  # GUI bundles: .dmg (macOS universal), NSIS -setup.exe + portable exe
+  # (Windows), .deb (Linux x86_64 / aarch64). On a v* tag the app version is
+  # taken from the tag (e.g. 0.1.0-beta.3) so .deb/NSIS upgrades work between
+  # betas; MSI is not built because it rejects non-numeric pre-releases.
   bundle:
     needs: test
-    # creates the draft release on a v* tag
-    permissions:
-      contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: macos-latest
-            args: "--target universal-apple-darwin"
+            args: "--target universal-apple-darwin --bundles dmg"
           - platform: ubuntu-22.04
-            args: ""
+            args: "--bundles deb"
+          - platform: ubuntu-22.04-arm
+            args: "--bundles deb"
           - platform: windows-latest
-            args: ""
+            args: "--bundles nsis"
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v7
@@ -67,54 +76,61 @@ jobs:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
       - uses: Swatinem/rust-cache@v2
       - name: Linux deps
-        if: matrix.platform == 'ubuntu-22.04'
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev patchelf
       - run: npm ci
       - run: node src/heatmap.check.ts
-      - uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          args: ${{ matrix.args }}
-          # On a v* tag, create a draft release with the bundles attached
-          tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
-          releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('WiFiSight {0}', github.ref_name) || '' }}
-          releaseDraft: true
+      - name: Build
+        shell: bash
+        run: |
+          # Version override goes through a file: JSON on the command line
+          # gets its quotes stripped by npm's cmd shim on Windows.
+          ver=()
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+            echo "{\"version\":\"${GITHUB_REF_NAME#v}\"}" > "$RUNNER_TEMP/version.json"
+            ver=(--config "$RUNNER_TEMP/version.json")
+          fi
+          npm run tauri build -- ${{ matrix.args }} "${ver[@]}"
       - uses: actions/upload-artifact@v7
         with:
           name: bundle-${{ matrix.platform }}
           path: |
-            target/**/release/bundle/**/*.dmg
-            target/**/release/bundle/**/*.msi
-            target/**/release/bundle/**/*.exe
-            target/**/release/bundle/**/*.deb
-            target/**/release/bundle/**/*.AppImage
-            target/**/release/bundle/**/*.rpm
+            target/**/release/bundle/dmg/*.dmg
+            target/release/bundle/nsis/*-setup.exe
+            target/release/bundle/deb/*.deb
+            target/release/wifisight.exe
 
-  # On a v* tag, attach the CLI binaries to the draft release created by the
-  # bundle job.
-  release-cli:
+  # On a v* tag, collect the bundles and CLI binaries into a draft release.
+  # Tags with a pre-release suffix are marked as pre-release, except
+  # -release.N (the stable scheme: plain 0.1.0 would sort below
+  # 0.1.0-beta.N in dpkg).
+  release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: bundle
+    needs: [test, bundle]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v8
-        with:
-          pattern: wifisight-cli-*
       - name: Package
         run: |
           mkdir out
-          for pair in ubuntu-22.04:linux-x86_64 ubuntu-24.04-arm:linux-aarch64 macos-latest:macos-aarch64; do
+          find bundle-* \( -name '*.dmg' -o -name '*-setup.exe' -o -name '*.deb' \) -exec cp {} out/ \;
+          # the bare app exe runs without installing (needs WebView2)
+          cp "$(find bundle-windows-latest -name wifisight.exe)" "out/WiFiSight_${GITHUB_REF_NAME#v}_x64-portable.exe"
+          for pair in ubuntu-22.04:linux-x86_64 ubuntu-24.04-arm:linux-aarch64 macos-latest:macos-universal; do
             src=${pair%%:*} dst=wifisight-cli-${GITHUB_REF_NAME}-${pair##*:}
             chmod +x wifisight-cli-$src/wifisight-cli
             tar -czf out/$dst.tar.gz -C wifisight-cli-$src wifisight-cli
           done
           cp wifisight-cli-windows-latest/wifisight-cli.exe out/wifisight-cli-${GITHUB_REF_NAME}-windows-x86_64.exe
-      - name: Upload to release
+          ls -l out
+      - name: Create draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$GITHUB_REF_NAME" out/* --clobber --repo "$GITHUB_REPOSITORY"
+        run: |
+          pre=()
+          if [[ $GITHUB_REF_NAME == *-* && $GITHUB_REF_NAME != *-release.* ]]; then pre=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" out/* --draft --title "WiFiSight $GITHUB_REF_NAME" "${pre[@]}" --repo "$GITHUB_REPOSITORY"
