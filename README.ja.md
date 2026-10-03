@@ -52,8 +52,8 @@ macOS、Windows、Linux で動き、解析は共通の `wifi-core` が行うの�
 | OS | ファイル |
 |---|---|
 | macOS 11 以降（Apple Silicon、Intel） | `.dmg` |
-| Windows 10/11（x64） | `.msi` または `-setup.exe` |
-| Linux（x64） | `.deb` または `.AppImage` |
+| Windows 10/11（x64） | `-setup.exe`。インストールせずに使うなら `-portable.exe`（WebView2 が必要。Windows 11 には標準で入っています） |
+| Linux（x64、arm64） | `.deb` |
 
 ### 初回起動
 
@@ -61,7 +61,7 @@ macOS、Windows、Linux で動き、解析は共通の `wifi-core` が行うの�
 
 - **macOS**：`.dmg` からアプリケーションフォルダにコピーして起動します。起動できないときは、システム設定 › プライバシーとセキュリティ で「このまま開く」を押してください
 - **Windows**：SmartScreen の画面で「詳細情報」→「実行」を選びます
-- **Linux**：`.deb` は `sudo apt install ./<ファイル名>.deb` でインストールします。`.AppImage` は `chmod +x` で実行権限を付けてから起動します
+- **Linux**：`sudo apt install ./<ファイル名>.deb` でインストールします。アップデートも同じ手順です
 
 ### 権限
 
@@ -71,12 +71,12 @@ macOS、Windows、Linux で動き、解析は共通の `wifi-core` が行うの�
 |---|---|
 | macOS | 位置情報サービス。許可しないと SSID と BSSID が取得できません。初回起動時に許可を求められます。なお、CLI 単体では BSSID を取得できません |
 | Windows | Windows 11 24H2 以降は、設定 › プライバシーとセキュリティ › 位置情報 で「デスクトップ アプリに位置情報へのアクセスを許可する」をオンにします |
-| Linux | スキャンの開始に `CAP_NET_ADMIN` が必要です。`.deb` の場合は `sudo setcap cap_net_admin+ep /usr/bin/wifisight` で付与します。権限がないときは `nmcli` 経由で再スキャンを試み、それも失敗するとキャッシュ済みの結果を表示します |
+| Linux | スキャンの開始に `CAP_NET_ADMIN` が必要です。`.deb` の場合は `sudo setcap cap_net_admin+ep /usr/bin/wifisight` で付与します（アップデートのたびに付け直してください）。権限がないときは `nmcli` 経由で再スキャンを試み、それも失敗するとキャッシュ済みの結果を表示します |
 
 ## CLI
 
 `wifisight-cli` は、同じリリースページに別ファイルとして置いています。
-`linux-x86_64`、`linux-aarch64`（Raspberry Pi など）、`macos-aarch64`、`windows-x86_64` 向けがあります。
+`linux-x86_64`、`linux-aarch64`（Raspberry Pi など）、`macos-universal`、`windows-x86_64` 向けがあります。
 `.tar.gz` を展開し（Windows 版は `.exe` のまま）、`PATH` の通った場所に置いてください。
 
 ```sh
@@ -117,7 +117,7 @@ sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appi
 ```sh
 npm install
 npm run tauri dev     # 開発モードで起動
-npm run tauri build   # 配布用バンドルを作成（.app/.dmg、.msi、.deb/.AppImage）
+npm run tauri build   # 配布用バンドルを作成（.app/.dmg、-setup.exe、.deb）
 cargo run -p wifi-cli -- scan   # CLI を実行
 ```
 
