@@ -41,6 +41,12 @@
     ],
     "macOS": {
       "minimumSystemVersion": "11.0"
+    },
+    "linux": {
+      "deb": {
+        "depends": ["libcap2-bin"],
+        "postInstallScript": "deb/postinst"
+      }
     }
   }
 }

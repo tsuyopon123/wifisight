@@ -69,7 +69,7 @@ Scanning needs the following permissions.
 |---|---|
 | macOS | Location Services. Without it, SSID and BSSID are unavailable. The app asks on first launch. The standalone CLI cannot get BSSIDs |
 | Windows | On Windows 11 24H2 and later, turn on Settings › Privacy & security › Location › "Let desktop apps access your location" |
-| Linux | Triggering a scan needs `CAP_NET_ADMIN`. For a `.deb` install, grant it with `sudo setcap cap_net_admin+ep /usr/bin/wifisight` (again after each update). Without it, the app asks NetworkManager (`nmcli`) to rescan, and falls back to cached results if that fails too |
+| Linux | Triggering a scan needs `CAP_NET_ADMIN`. The `.deb` grants it on install (if that fails, run `sudo setcap cap_net_admin+ep /usr/bin/wifisight`). Without it, the app asks NetworkManager (`nmcli`) to rescan, and falls back to cached results if that fails too |
 
 ## CLI
 

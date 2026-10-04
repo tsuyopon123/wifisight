@@ -71,7 +71,7 @@ macOS、Windows、Linux で動き、解析は共通の `wifi-core` が行うの�
 |---|---|
 | macOS | 位置情報サービス。許可しないと SSID と BSSID が取得できません。初回起動時に許可を求められます。なお、CLI 単体では BSSID を取得できません |
 | Windows | Windows 11 24H2 以降は、設定 › プライバシーとセキュリティ › 位置情報 で「デスクトップ アプリに位置情報へのアクセスを許可する」をオンにします |
-| Linux | スキャンの開始に `CAP_NET_ADMIN` が必要です。`.deb` の場合は `sudo setcap cap_net_admin+ep /usr/bin/wifisight` で付与します（アップデートのたびに付け直してください）。権限がないときは `nmcli` 経由で再スキャンを試み、それも失敗するとキャッシュ済みの結果を表示します |
+| Linux | スキャンの開始に `CAP_NET_ADMIN` が必要です。`.deb` はインストール時に自動で付与します（失敗したときは `sudo setcap cap_net_admin+ep /usr/bin/wifisight` を実行してください）。権限がないときは `nmcli` 経由で再スキャンを試み、それも失敗するとキャッシュ済みの結果を表示します |
 
 ## CLI
 
