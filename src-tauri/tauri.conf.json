@@ -26,6 +26,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "category": "Utility",
     "shortDescription": "Wi-Fi scanner / survey tool",
@@ -47,6 +48,13 @@
         "depends": ["libcap2-bin"],
         "postInstallScript": "deb/postinst"
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "REPLACE_WITH_TAURI_SIGNER_PUBLIC_KEY",
+      "endpoints": ["https://github.com/tsuyopon123/wifisight/releases/latest/download/latest.json"],
+      "windows": { "installMode": "passive" }
     }
   }
 }

@@ -27,9 +27,11 @@ struct Snapshot {
 struct PlatformInfo {
     os: &'static str,
     arch: &'static str,
-    version: &'static str,
+    version: String,
     location_status: Option<String>,
     oui_entries: usize,
+    /// false for the Windows portable exe: the updater would run the NSIS installer instead.
+    installable: bool,
 }
 
 fn now_ms() -> u64 {
@@ -40,11 +42,12 @@ fn now_ms() -> u64 {
 }
 
 #[tauri::command]
-fn platform_info(state: State<'_, AppState>) -> PlatformInfo {
+fn platform_info(app: tauri::AppHandle, state: State<'_, AppState>) -> PlatformInfo {
     PlatformInfo {
         os: std::env::consts::OS,
         arch: std::env::consts::ARCH,
-        version: env!("CARGO_PKG_VERSION"),
+        // tauri.conf version: CI sets it from the tag (e.g. 0.1.0-beta.3); Cargo stays 0.1.0
+        version: app.package_info().version.to_string(),
         location_status: wifi_scan::location_permission_status(),
         oui_entries: state
             .oui
@@ -53,6 +56,9 @@ fn platform_info(state: State<'_, AppState>) -> PlatformInfo {
             .as_ref()
             .map(|d| d.len())
             .unwrap_or(0),
+        installable: !cfg!(windows)
+            || std::env::current_exe()
+                .is_ok_and(|p| p.with_file_name("uninstall.exe").exists()),
     }
 }
 
@@ -209,6 +215,9 @@ fn request_location(app: tauri::AppHandle) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let data_dir = app
                 .path()

@@ -26,6 +26,7 @@ const state = {
   lastInterface: "",
   connLabel: "",
   os: "",
+  installable: false,
   location: null as string | null,
   lastError: "", // last scan failure, cleared by the next good scan
   table: { sortKey: "rssi", sortAsc: false, selected: null } as TableState,
@@ -516,6 +517,7 @@ function bind() {
     }
   };
   $("btn-loc").onclick = () => requestLocation();
+  $("btn-update").onclick = () => checkForUpdate(true);
   $("details").addEventListener("click", async (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-act]");
     const act = btn?.dataset.act;
@@ -648,6 +650,40 @@ async function loadInterfaces() {
   }
 }
 
+/** manual = the Settings button: report every outcome. On startup, stay quiet unless there is an update. */
+async function checkForUpdate(manual: boolean) {
+  const st = $("update-status");
+  const btn = $<HTMLButtonElement>("btn-update");
+  if (manual) st.textContent = "Checking…";
+  btn.disabled = true;
+  try {
+    const update = await api.checkUpdate();
+    if (!update) {
+      if (manual) st.textContent = "Up to date.";
+      return;
+    }
+    st.textContent = `v${update.version} is available.`;
+    if (!state.installable) {
+      if (await api.ask(`WiFiSight v${update.version} is available. Open the download page?`)) await api.openReleases();
+      return;
+    }
+    if (!(await api.ask(`WiFiSight v${update.version} is available. Update and restart now?\nSurvey data is autosaved.`))) return;
+    let total = 0;
+    let got = 0;
+    await update.downloadAndInstall((e) => {
+      if (e.event === "Started") total = e.data.contentLength ?? 0;
+      else if (e.event === "Progress") got += e.data.chunkLength;
+      const msg = total ? `Downloading update… ${Math.floor((got / total) * 100)}%` : "Downloading update…";
+      st.textContent = $("st-warn").textContent = e.event === "Finished" ? "Installing update…" : msg;
+    });
+    await api.relaunch(); // Windows: the NSIS installer has already closed the app
+  } catch (e) {
+    if (manual) st.textContent = `Update check failed: ${e}`;
+  } finally {
+    btn.disabled = !api.isTauri;
+  }
+}
+
 function stamp() {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, "0");
@@ -659,6 +695,8 @@ async function init() {
   const info = await api.platformInfo();
   state.os = info.os;
   state.location = info.locationStatus;
+  state.installable = info.installable;
+  $<HTMLButtonElement>("btn-update").disabled = !api.isTauri;
   const loc = info.locationStatus ? ` · location: ${info.locationStatus}` : "";
   $("st-platform").textContent = `${info.os}${info.arch ? "/" + info.arch : ""} · v${info.version}${loc}`;
   $("oui-status").textContent = info.ouiEntries ? `${info.ouiEntries.toLocaleString()} OUIs loaded.` : "Not loaded.";
@@ -686,6 +724,7 @@ async function init() {
   });
   render();
   scanOnce();
+  if (api.isTauri) checkForUpdate(false);
   // refresh "last seen" ages and the time axis between scans
   setInterval(() => {
     if (state.tab === "signal") renderChart();

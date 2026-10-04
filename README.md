@@ -59,7 +59,13 @@ The app is not code-signed, so you'll see a warning the first time.
 
 - **macOS**: copy the app from the `.dmg` to Applications and open it. If it's blocked, click "Open Anyway" in System Settings › Privacy & Security
 - **Windows**: on the SmartScreen dialog, click "More info", then "Run anyway"
-- **Linux**: install the `.deb` with `sudo apt install ./<file>.deb`. Updating works the same way
+- **Linux**: install the `.deb` with `sudo apt install ./<file>.deb`
+
+### Updates
+
+The app checks for a new release on launch and asks before updating. You can also check from Settings › Updates.
+It downloads and installs the update, then restarts (Linux asks for your password to install the `.deb`).
+Only stable releases (`-release.N`) are offered. The `-portable.exe` opens the Releases page instead, and betas are updated by hand.
 
 ### Permissions
 
