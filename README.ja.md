@@ -127,6 +127,9 @@ macOS の位置情報の権限は `.app` ごとに付与されるため、`npm r
 `npm run dev` で http://localhost:1420 を開くと、UI だけを確認できます。
 ブラウザからはスキャンできないので、スキャン結果の欄はエラー表示になります。
 
+`THIRD_PARTY_LICENSES.html` はアプリに同梱され、CI がビルドのたびに再生成します。
+依存を変えたあとにローカルでも更新するなら、`cargo about generate about.hbs -o THIRD_PARTY_LICENSES.html` を実行してください（`cargo install cargo-about --locked --features cli` で入ります）。
+
 ### 構成
 
 各 OS 向けのスキャナは生の BSS 情報と IE を集めるだけで、解析はすべて共通の `wifi-core` が行います。
