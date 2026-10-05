@@ -1096,9 +1096,9 @@ function applyScale() {
   const px = Math.hypot((calib.b.x - calib.a.x) * project.imageW, (calib.b.y - calib.a.y) * project.imageH);
   input.setCustomValidity(!(m > 0) ? "Enter a distance greater than 0" : px < 1 ? "The two points are too close together" : "");
   if (!input.reportValidity()) return;
+  const prev = project.mPerPx; // undefined = no scale yet
   project.mPerPx = m / px;
   calib = null;
-  const prev = project.mPerPx;
   pushUndo(`Scale set: ${m} m`, () => project && (project.mPerPx = prev));
   autosave();
   render();
