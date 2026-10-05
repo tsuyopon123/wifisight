@@ -205,20 +205,20 @@ try {
     };
     async function measureAt(fx, fy, label) {
       const before = await nPoints();
-      const t0 = Date.now();
+      const s0 = await ev("window.__mock.scans");
       await click(await planPoint(fx, fy));
       await waitFor(`JSON.parse(window.__mock.autosave).points.filter((p) => p.scans > 0).length > ${before}`, 10000);
-      const ms = Date.now() - t0;
       check(label, await lastRssi(), -80);
-      return ms;
+      return (await ev("window.__mock.scans")) - s0; // scans that finished between the click and the record
     }
 
     // 0) scanning normally: Instant still records the latest scan right away (no waiting for a 1.5 s scan)
     await ev(`window.__mock.rssi = { en0: -80, en1: -80 }; window.__mock.delay = 1500`);
     await freshScan();
     await freshScan(); // the first may have started before -80 was set
-    const ms = await measureAt(0.3, 0.6, "while scanning → latest scan");
-    check("while scanning → recorded without waiting for the 1.5 s scan (< 1000 ms)", ms < 1000, true);
+    // counted in scans, not ms: CDP input alone can take most of a second on a busy runner
+    const waited = await measureAt(0.3, 0.6, "while scanning → latest scan");
+    check("while scanning → recorded without waiting for another scan", waited, 0);
     await ev(`window.__mock.rssi = { en0: -50, en1: -50 }; window.__mock.delay = 300`);
 
     // 1) paused, then the user walks to a new spot (-80 there) and clicks: the scan from before the pause is stale
@@ -347,7 +347,12 @@ try {
     await gone;
   }
   await server.close();
-  rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  try {
+    rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  } catch (e) {
+    // Chrome's helper processes on Linux can outlive it and keep writing; a leftover temp dir isn't a failure
+    console.warn(`could not remove ${profile}: ${e.message}`);
+  }
 }
 console.log(failed ? `${failed} check(s) failed` : "all checks passed");
 process.exit(failed ? 1 : 0);
