@@ -47,12 +47,38 @@ jobs:
             target/release/wifisight-cli
             target/release/wifisight-cli.exe
 
+  # UI: type-check + build (dist/ is also what the Tauri backend embeds, so clippy needs it),
+  # the node self-checks (src/*.check.ts, npm run check), and clippy on the Tauri backend.
+  ui:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Linux deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev
+      - run: npm ci
+      - name: Type-check and build the UI
+        run: npm run build
+      - name: Self-checks
+        run: npm run check
+      - name: Clippy (Tauri backend)
+        run: cargo clippy -p wifisight -- -D warnings
+
   # GUI bundles: .dmg (macOS universal), NSIS -setup.exe + portable exe
   # (Windows), .deb (Linux x86_64 / aarch64). On a v* tag the app version is
   # taken from the tag (e.g. 0.1.0-beta.3) so .deb/NSIS upgrades work between
   # betas; MSI is not built because it rejects non-numeric pre-releases.
   bundle:
-    needs: test
+    needs: [test, ui]
     strategy:
       fail-fast: false
       matrix:
@@ -88,7 +114,6 @@ jobs:
       # regenerate so the bundled notices match Cargo.lock (bundle.resources)
       - run: cargo about generate about.hbs -o THIRD_PARTY_LICENSES.html
       - run: npm ci
-      - run: node src/heatmap.check.ts
       - name: Build
         shell: bash
         env:

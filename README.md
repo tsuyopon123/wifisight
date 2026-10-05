@@ -149,7 +149,7 @@ The per-OS scanners only collect raw BSS data and IEs; all parsing happens in th
 
 ```sh
 cargo test -p wifi-core -p wifi-scan -p wifi-cli
-node src/heatmap.check.ts    # heatmap self-check
+npm run check                # UI self-checks (src/*.check.ts)
 ```
 
 GitHub Actions runs the tests on macOS, Windows, and Ubuntu and builds the CLI and GUI bundles. Pushing a `v*` tag creates a draft release with the bundles attached.
