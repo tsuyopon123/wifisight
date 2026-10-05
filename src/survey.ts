@@ -134,6 +134,7 @@ let metric: Metric = "signal";
 let selectedPoint: string | null = null;
 let scansPerPoint = 1;
 let instant = true; // record the latest scan right away instead of waiting for new ones
+// latest scan, while it still describes where the user stands: dropped on resume, source switch and failed scans
 let lastSnap: Snapshot | null = null;
 let measuring: {
   id: string;
@@ -393,8 +394,21 @@ export function onSnapshot(s: Snapshot) {
   render();
 }
 
+/** Fed when main.ts voids every earlier scan (resume, interface / probe switch): nothing taken before counts. */
+export function onScanReset() {
+  lastSnap = null; // Instant waits for a scan taken from now on
+  // a point being measured starts over, so it never mixes two spots or two radios
+  if (measuring) Object.assign(measuring, { left: scansPerPoint, fails: 0, err: "", samples: {}, noise: {} });
+}
+
+/** Fed when main.ts drops a scan that was in flight at a reset: it never arrives, so stop waiting it out. */
+export function onScanDropped() {
+  if (measuring && measuring.skip > 0) measuring.skip--;
+}
+
 /** Fed every failed scan from main.ts: counts toward giving up on the point being measured. */
 export function onScanError(msg: string) {
+  lastSnap = null; // the last good scan predates the failure
   if (!project || !measuring) return;
   if (measuring.skip > 0) {
     measuring.skip--;
