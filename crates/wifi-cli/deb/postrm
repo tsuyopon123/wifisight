@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+if [ "$1" = purge ]; then
+  rm -f /etc/systemd/system/multi-user.target.wants/wifisight-probe.service
+fi
+if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload || true
+fi

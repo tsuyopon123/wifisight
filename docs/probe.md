@@ -39,34 +39,22 @@ Linux を推奨する。
 
 ## セットアップ（Linux）
 
-1. `wifisight-cli` を `/usr/local/bin/` に置く。
-   [Releases](https://github.com/tsuyopon123/wifisight/releases) の `wifisight-cli-<バージョン>-linux-x86_64.tar.gz`（Raspberry Pi などの aarch64 機では `linux-aarch64`）を展開して使うか、デバイス上で `cargo build -p wifi-cli --release` でビルドする。
-
-2. systemd で常駐させる。
-   この設定をしておくと、デバイスの起動時に Probe として動く。
-
-   `/etc/systemd/system/wifisight-probe.service`：
-
-   ```ini
-   [Unit]
-   Description=WiFiSight probe
-   After=network-online.target
-
-   [Service]
-   ExecStart=/usr/local/bin/wifisight-cli serve --listen 0.0.0.0:8737
-   DynamicUser=yes
-   # nl80211 でアクティブスキャンを起動するのに必要
-   AmbientCapabilities=CAP_NET_ADMIN
-   CapabilityBoundingSet=CAP_NET_ADMIN
-   Restart=always
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
+1. Probe 用の `.deb` を入れる。
+   [Releases](https://github.com/tsuyopon123/wifisight/releases) の `wifisight-probe_<バージョン>_amd64.deb`（Raspberry Pi などの aarch64 機では `_arm64.deb`）を使う。
 
    ```sh
-   sudo systemctl enable --now wifisight-probe
+   sudo apt install ./wifisight-probe_<バージョン>_arm64.deb
    ```
+
+   `wifisight-cli` が `/usr/bin/` に入り、systemd の `wifisight-probe.service` が有効になって、すぐに `0.0.0.0:8737` で待ち受ける。
+   デバイスの起動時にも Probe として動く。
+   更新は新しい `.deb` を同じように入れる。
+   待ち受けるアドレスを変えるときは `sudo systemctl edit wifisight-probe` で `ExecStart` を上書きする。
+
+   以前の手順で `/etc/systemd/system/wifisight-probe.service` を自分で作った場合は、そちらが優先されるので削除してから `sudo systemctl daemon-reload` する。
+
+2. `.deb` を使わない場合は、`wifisight-cli-<バージョン>-linux-x86_64.tar.gz`（aarch64 機では `linux-aarch64`）を展開して `/usr/local/bin/` に置くか、デバイス上で `cargo build -p wifi-cli --release` でビルドする。
+   systemd で常駐させるには、`.deb` と同じ unit（[crates/wifi-cli/deb/wifisight-probe.service](../crates/wifi-cli/deb/wifisight-probe.service)）を `/etc/systemd/system/` に置き、`ExecStart` のパスを `/usr/local/bin/wifisight-cli` にして `sudo systemctl enable --now wifisight-probe` する。
 
 3. スキャンに使う Wi-Fi インターフェースは、どのアクセスポイントにも接続しないでおく。接続中のインターフェースではスキャンを間引くドライバがある。
 
@@ -111,6 +99,7 @@ API は次の 3 つである。
 ## セキュリティ
 
 API に認証はない（読み取り専用）。
+`.deb` は入れた直後から `0.0.0.0:8737` で待ち受ける。
 信頼できるネットワークだけで使い、必要なら `--listen <IP>:8737` で待ち受けるアドレスを絞る。
 
 ## トラブルシュート

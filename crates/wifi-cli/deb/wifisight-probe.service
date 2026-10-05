@@ -1,0 +1,17 @@
+[Unit]
+Description=WiFiSight probe (wifisight-cli serve)
+Documentation=https://github.com/tsuyopon123/wifisight/blob/main/docs/probe.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+# change the address with: sudo systemctl edit wifisight-probe
+ExecStart=/usr/bin/wifisight-cli serve --listen 0.0.0.0:8737
+DynamicUser=yes
+# nl80211 needs it to trigger active scans
+AmbientCapabilities=CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_ADMIN
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

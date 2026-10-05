@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+# fresh install: enable and start. Upgrade / reinstall: (re)start only if enabled, so a service the
+# user disabled stays off, and one that was enabled before `apt remove` comes back.
+if [ "$1" = configure ] && [ -d /run/systemd/system ]; then
+  systemctl daemon-reload
+  # a probe that can't start (e.g. port 8737 taken) must not fail the install
+  start_failed() { echo "wifisight-probe: not running; see: journalctl -u wifisight-probe" >&2; }
+  if [ -z "$2" ]; then
+    systemctl enable wifisight-probe.service
+    systemctl start wifisight-probe.service || start_failed
+  elif systemctl is-enabled --quiet wifisight-probe.service; then
+    systemctl restart wifisight-probe.service || start_failed
+  fi
+fi
