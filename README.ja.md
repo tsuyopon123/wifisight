@@ -158,7 +158,7 @@ macOS の位置情報の権限は `.app` ごとに付与されるため、`npm r
 
 ```sh
 cargo test -p wifi-core -p wifi-scan -p wifi-cli
-node src/heatmap.check.ts    # ヒートマップ計算の自己チェック
+npm run check                # UI の自己チェック（src/*.check.ts）
 ```
 
 GitHub Actions が macOS、Windows、Ubuntu でテストを実行し、CLI と GUI のバンドルを作ります。
