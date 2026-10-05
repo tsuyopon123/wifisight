@@ -26,6 +26,7 @@ const state = {
   lastInterface: "",
   connLabel: "",
   os: "",
+  installable: false,
   location: null as string | null,
   lastError: "", // last scan failure, cleared by the next good scan
   table: { sortKey: "rssi", sortAsc: false, selected: null } as TableState,
@@ -516,6 +517,15 @@ function bind() {
     }
   };
   $("btn-loc").onclick = () => requestLocation();
+  $("btn-update").onclick = () => checkForUpdate(true);
+  for (const [id, key] of [["chk-autoupdate", "wifisight.autoUpdate"], ["chk-beta", "wifisight.beta"]]) {
+    $<HTMLInputElement>(id).onchange = (e) => {
+      try {
+        localStorage.setItem(key, (e.target as HTMLInputElement).checked ? "1" : "0");
+      } catch {}
+    };
+  }
+  $("st-update").onclick = () => $<HTMLDialogElement>("dlg-settings").showModal();
   $("details").addEventListener("click", async (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-act]");
     const act = btn?.dataset.act;
@@ -648,6 +658,51 @@ async function loadInterfaces() {
   }
 }
 
+/**
+ * manual = the Settings button: report every outcome and offer to install.
+ * On launch, only mark a newer version in the status bar; installing is always the user's click.
+ */
+async function checkForUpdate(manual: boolean) {
+  const st = $("update-status");
+  const btn = $<HTMLButtonElement>("btn-update");
+  if (manual) st.textContent = "Checking…";
+  btn.disabled = true;
+  let failed = "Update check failed";
+  try {
+    const update = await api.checkUpdate($<HTMLInputElement>("chk-beta").checked);
+    if (!update) {
+      $("st-update").hidden = true; // e.g. a beta found earlier, before "Include beta releases" was turned off
+      if (manual) st.textContent = "Up to date.";
+      return;
+    }
+    st.textContent = `v${update.version} is available.`;
+    $("st-update").textContent = `v${update.version} available`;
+    $("st-update").hidden = false;
+    if (!manual) return;
+    if (!state.installable) {
+      if (await api.ask(`WiFiSight v${update.version} is available. Open the download page?`)) await api.openReleases();
+      return;
+    }
+    if (!(await api.ask(`WiFiSight v${update.version} is available. Update and restart now?\nSurvey data is autosaved.`))) return;
+    failed = "Update failed";
+    let total = 0;
+    let got = 0;
+    await update.downloadAndInstall((e) => {
+      if (e.event === "Started") total = e.data.contentLength ?? 0;
+      else if (e.event === "Progress") got += e.data.chunkLength;
+      const msg = total ? `Downloading update… ${Math.floor((got / total) * 100)}%` : "Downloading update…";
+      st.textContent = $("st-warn").textContent = e.event === "Finished" ? "Installing update…" : msg;
+    });
+    await api.relaunch(); // Windows: the NSIS installer has already closed the app
+  } catch (e) {
+    if (manual) st.textContent = `${failed}: ${e}`;
+    // replace "Installing update…" in the status bar, which stays while scanning is paused
+    if (failed === "Update failed") $("st-warn").textContent = st.textContent;
+  } finally {
+    btn.disabled = !api.isTauri;
+  }
+}
+
 function stamp() {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, "0");
@@ -659,6 +714,8 @@ async function init() {
   const info = await api.platformInfo();
   state.os = info.os;
   state.location = info.locationStatus;
+  state.installable = info.installable;
+  for (const id of ["btn-update", "chk-autoupdate", "chk-beta"]) $<HTMLInputElement>(id).disabled = !api.isTauri;
   const loc = info.locationStatus ? ` · location: ${info.locationStatus}` : "";
   $("st-platform").textContent = `${info.os}${info.arch ? "/" + info.arch : ""} · v${info.version}${loc}`;
   $("oui-status").textContent = info.ouiEntries ? `${info.ouiEntries.toLocaleString()} OUIs loaded.` : "Not loaded.";
@@ -686,6 +743,14 @@ async function init() {
   });
   render();
   scanOnce();
+  // on by default; launch only marks the status bar, never prompts
+  let autoUpdate = true;
+  try {
+    autoUpdate = localStorage.getItem("wifisight.autoUpdate") !== "0";
+    $<HTMLInputElement>("chk-beta").checked = localStorage.getItem("wifisight.beta") === "1"; // off by default
+  } catch {}
+  $<HTMLInputElement>("chk-autoupdate").checked = autoUpdate;
+  if (api.isTauri && autoUpdate) checkForUpdate(false);
   // refresh "last seen" ages and the time axis between scans
   setInterval(() => {
     if (state.tab === "signal") renderChart();

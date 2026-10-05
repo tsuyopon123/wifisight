@@ -59,7 +59,14 @@ The app is not code-signed, so you'll see a warning the first time.
 
 - **macOS**: copy the app from the `.dmg` to Applications and open it. If it's blocked, click "Open Anyway" in System Settings › Privacy & Security
 - **Windows**: on the SmartScreen dialog, click "More info", then "Run anyway"
-- **Linux**: install the `.deb` with `sudo apt install ./<file>.deb`. Updating works the same way
+- **Linux**: install the `.deb` with `sudo apt install ./<file>.deb`
+
+### Updates
+
+On launch, the app checks for a new release and, if there is one, shows "vX available" next to the version in the status bar. It never updates on its own.
+To update, press "Check for updates" in Settings › Updates. It downloads and installs the update, then restarts (Linux asks for your password to install the `.deb`).
+Turn off "Check on launch" there to skip the check on launch.
+Only stable releases (`-release.N`) are offered unless you turn on "Include beta releases" there. The `-portable.exe` opens the Releases page instead of updating.
 
 ### Permissions
 
@@ -69,7 +76,7 @@ Scanning needs the following permissions.
 |---|---|
 | macOS | Location Services. Without it, SSID and BSSID are unavailable. The app asks on first launch. The standalone CLI cannot get BSSIDs |
 | Windows | On Windows 11 24H2 and later, turn on Settings › Privacy & security › Location › "Let desktop apps access your location" |
-| Linux | Triggering a scan needs `CAP_NET_ADMIN`. For a `.deb` install, grant it with `sudo setcap cap_net_admin+ep /usr/bin/wifisight` (again after each update). Without it, the app asks NetworkManager (`nmcli`) to rescan, and falls back to cached results if that fails too |
+| Linux | Triggering a scan needs `CAP_NET_ADMIN`. The `.deb` grants it on install (if that fails, run `sudo setcap cap_net_admin+ep /usr/bin/wifisight`). Without it, the app asks NetworkManager (`nmcli`) to rescan, and falls back to cached results if that fails too |
 
 ## CLI
 
@@ -115,6 +122,8 @@ npm run tauri dev     # run in development mode
 npm run tauri build   # build bundles (.app/.dmg, -setup.exe, .deb)
 cargo run -p wifi-cli -- scan   # run the CLI
 ```
+
+`npm run tauri build` also signs the in-app updater files, so it fails with "A public key has been found, but no private key" unless `TAURI_SIGNING_PRIVATE_KEY` (and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`) is set. Without the key, skip those files: `npm run tauri build -- --config '{"bundle":{"createUpdaterArtifacts":false}}'`.
 
 On macOS, the location permission is granted per `.app`, and with `npm run tauri dev` it may go to your terminal instead. To test reliably, run the `.app` built by `npm run tauri build -- --debug`.
 

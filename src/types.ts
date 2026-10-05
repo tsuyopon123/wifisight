@@ -108,6 +108,7 @@ export interface PlatformInfo {
   version: string;
   locationStatus: string | null;
   ouiEntries: number;
+  installable: boolean;
 }
 
 export interface Sample {

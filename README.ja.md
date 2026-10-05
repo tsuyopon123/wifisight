@@ -61,7 +61,14 @@ macOS、Windows、Linux で動き、解析は共通の `wifi-core` が行うの�
 
 - **macOS**：`.dmg` からアプリケーションフォルダにコピーして起動します。起動できないときは、システム設定 › プライバシーとセキュリティ で「このまま開く」を押してください
 - **Windows**：SmartScreen の画面で「詳細情報」→「実行」を選びます
-- **Linux**：`sudo apt install ./<ファイル名>.deb` でインストールします。アップデートも同じ手順です
+- **Linux**：`sudo apt install ./<ファイル名>.deb` でインストールします
+
+### アップデート
+
+起動時に新しいリリースを確認し、あればステータスバーの版の隣に「vX available」と表示します。勝手に更新はしません。
+更新するには、設定 › Updates の「Check for updates」を押します。ダウンロードとインストールのあと、アプリを再起動します（Linux では `.deb` のインストールにパスワードを求められます）。
+起動時の確認が不要なら、同じ場所の「Check on launch」をオフにしてください。
+通常は正式版（`-release.N`）だけを対象にします。beta も受け取るなら、同じ場所の「Include beta releases」をオンにしてください。`-portable.exe` では更新せずに Releases ページを開きます。
 
 ### 権限
 
@@ -71,7 +78,7 @@ macOS、Windows、Linux で動き、解析は共通の `wifi-core` が行うの�
 |---|---|
 | macOS | 位置情報サービス。許可しないと SSID と BSSID が取得できません。初回起動時に許可を求められます。なお、CLI 単体では BSSID を取得できません |
 | Windows | Windows 11 24H2 以降は、設定 › プライバシーとセキュリティ › 位置情報 で「デスクトップ アプリに位置情報へのアクセスを許可する」をオンにします |
-| Linux | スキャンの開始に `CAP_NET_ADMIN` が必要です。`.deb` の場合は `sudo setcap cap_net_admin+ep /usr/bin/wifisight` で付与します（アップデートのたびに付け直してください）。権限がないときは `nmcli` 経由で再スキャンを試み、それも失敗するとキャッシュ済みの結果を表示します |
+| Linux | スキャンの開始に `CAP_NET_ADMIN` が必要です。`.deb` はインストール時に自動で付与します（失敗したときは `sudo setcap cap_net_admin+ep /usr/bin/wifisight` を実行してください）。権限がないときは `nmcli` 経由で再スキャンを試み、それも失敗するとキャッシュ済みの結果を表示します |
 
 ## CLI
 
@@ -120,6 +127,9 @@ npm run tauri dev     # 開発モードで起動
 npm run tauri build   # 配布用バンドルを作成（.app/.dmg、-setup.exe、.deb）
 cargo run -p wifi-cli -- scan   # CLI を実行
 ```
+
+`npm run tauri build` はアプリ内アップデート用のファイルにも署名します。そのため `TAURI_SIGNING_PRIVATE_KEY`（と `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`）を設定していないと、「A public key has been found, but no private key」で失敗します。
+鍵がない場合は、それらのファイルを作らずにビルドしてください：`npm run tauri build -- --config '{"bundle":{"createUpdaterArtifacts":false}}'`
 
 macOS の位置情報の権限は `.app` ごとに付与されるため、`npm run tauri dev` ではターミナルに付与されることがあります。
 確実に試すなら、`npm run tauri build -- --debug` で作った `.app` を起動してください。

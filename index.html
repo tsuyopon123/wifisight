@@ -172,7 +172,7 @@
     </main>
 
     <footer class="statusbar">
-      <span id="st-platform"></span>
+      <span><span id="st-platform"></span><button type="button" id="st-update" class="st-link" title="Open Settings to update" hidden></button></span>
       <span id="st-scan"></span>
       <span id="st-count"></span>
       <span id="st-warn" class="warn"></span>
@@ -192,6 +192,13 @@
           <div>
             <button type="button" id="btn-oui">Update from IEEE OUI</button>
             <p class="hint" id="oui-status"></p>
+          </div>
+          <span>Updates</span>
+          <div>
+            <button type="button" id="btn-update">Check for updates</button>
+            <label class="check"><input type="checkbox" id="chk-autoupdate" checked /> Check on launch</label>
+            <label class="check"><input type="checkbox" id="chk-beta" /> Include beta releases</label>
+            <p class="hint" id="update-status"></p>
           </div>
           <label for="sel-theme">Theme</label>
           <div>
