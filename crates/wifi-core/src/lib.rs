@@ -8,6 +8,8 @@
 
 pub mod analyze;
 pub mod channel;
+#[cfg(test)]
+mod fuzz;
 pub mod ie;
 #[cfg(test)]
 mod ie_builder;

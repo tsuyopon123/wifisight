@@ -34,11 +34,16 @@ pub fn analyze(raw: &RawBss, oui: Option<&OuiDb>) -> BssInfo {
         .unwrap_or(0);
     let (width, center) = channel_geometry(&els, band, channel, raw.os_channel_width_mhz);
     let center_freq = channel_to_freq(band, center).unwrap_or(raw.freq_mhz);
-    let (freq_low, freq_high) = if band == Band::B2g4 && width == 20 {
+    let (freq_low, freq_high) = if center_freq == 0 {
+        (0, 0) // no frequency from the OS: nothing to draw
+    } else if band == Band::B2g4 && width == 20 {
         // DSSS/OFDM 20 MHz-ish mask; draw 22 MHz wide like most tools
-        (center_freq - 11, center_freq + 11)
+        (center_freq.saturating_sub(11), center_freq + 11)
     } else {
-        (center_freq - width / 2, center_freq + width / 2)
+        (
+            center_freq.saturating_sub(width / 2),
+            center_freq + width / 2,
+        ) // a bogus tiny frequency
     };
 
     // ── Capabilities ──
