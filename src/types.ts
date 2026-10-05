@@ -102,6 +102,13 @@ export interface Interface {
   mac: string | null;
 }
 
+/** `GET /` of an external probe (wifisight-cli serve). */
+export interface ProbeInfo {
+  app: string;
+  version: string;
+  os: string;
+}
+
 export interface PlatformInfo {
   os: string;
   arch: string;

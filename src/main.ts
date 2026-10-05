@@ -647,6 +647,7 @@ function clearSession() {
 }
 
 async function loadInterfaces() {
+  showProbeStatus();
   try {
     const ifs = await api.listInterfaces(state.probe);
     $("sel-iface").innerHTML =
@@ -655,6 +656,28 @@ async function loadInterfaces() {
     $("sel-iface").innerHTML = `<option value="">${api.isTauri ? "(none found)" : "(desktop app only)"}</option>`;
     $("st-warn").textContent = explain(String(e)).title;
     $("st-warn").title = String(e);
+  }
+}
+
+const PROBE_HINT = $("probe-status").innerHTML;
+
+/** Under the Probe field: which probe answered (version, OS), or why none did. */
+async function showProbeStatus() {
+  const el = $("probe-status");
+  const p = state.probe;
+  if (!p) {
+    el.innerHTML = PROBE_HINT;
+    return;
+  }
+  el.textContent = `Connecting to ${p}…`;
+  try {
+    const i = await api.probeInfo(p);
+    if (p !== state.probe) return; // changed while waiting
+    el.textContent = i?.app === "wifisight-probe" ? `Connected: ${i.app} ${i.version} (${i.os})` : `${p} answered, but it isn't a WiFiSight probe.`;
+  } catch (e) {
+    if (p !== state.probe) return;
+    // probe_get: a body that isn't JSON, or an HTTP error for "/" (a probe always answers it) = another web server
+    el.textContent = /bad response|: HTTP \d{3}:/.test(String(e)) ? `${p} answered, but it isn't a WiFiSight probe.` : `Not reachable: ${e}`;
   }
 }
 
