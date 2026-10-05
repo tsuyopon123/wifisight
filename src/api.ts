@@ -32,10 +32,12 @@ export async function updateOui(): Promise<number> {
   throw new Error("OUI download is only available in the desktop app");
 }
 
-/** Newer release from the updater endpoint, or null when up to date. Throws when offline etc. */
-export async function checkUpdate() {
+/** Newer release (betas too when `beta`), or null when up to date. Throws when offline etc. */
+export async function checkUpdate(beta: boolean) {
   if (!isTauri) throw new Error("Updates are only available in the desktop app");
-  return (await import("@tauri-apps/plugin-updater")).check();
+  const { Update } = await import("@tauri-apps/plugin-updater");
+  const meta = await invoke<ConstructorParameters<typeof Update>[0] | null>("check_update", { beta });
+  return meta && new Update(meta);
 }
 
 export async function relaunch(): Promise<void> {

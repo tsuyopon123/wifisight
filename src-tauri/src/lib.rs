@@ -3,10 +3,13 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Manager, State};
+use tauri_plugin_updater::UpdaterExt;
 use wifi_core::{analyze, BssInfo, OuiDb};
 use wifi_scan::{Interface, ScanOptions};
 
 const OUI_URL: &str = "https://standards-oui.ieee.org/oui/oui.csv";
+/// Published releases, newest first, pre-releases included (drafts are hidden without auth).
+const RELEASES_API: &str = "https://api.github.com/repos/tsuyopon123/wifisight/releases?per_page=20";
 
 struct AppState {
     oui: Arc<Mutex<Option<OuiDb>>>,
@@ -181,6 +184,74 @@ async fn update_oui_db(state: State<'_, AppState>) -> Result<usize, String> {
     .map_err(|e| e.to_string())?
 }
 
+/// latest.json of the newest published release, betas included. The stable channel instead
+/// uses the configured releases/latest endpoint, which skips pre-releases.
+fn beta_manifest_url() -> Result<tauri::Url, String> {
+    #[derive(serde::Deserialize)]
+    struct Asset {
+        name: String,
+        browser_download_url: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct Release {
+        assets: Vec<Asset>,
+    }
+    // ponytail: env override only exists to point a test build at a local server
+    let api = std::env::var("WIFISIGHT_RELEASES_API").unwrap_or_else(|_| RELEASES_API.into());
+    let body = ureq::get(&api)
+        .header("User-Agent", "wifisight")
+        .header("Accept", "application/vnd.github+json")
+        .call()
+        .map_err(|e| format!("release list: {e}"))?
+        .body_mut()
+        .read_to_string()
+        .map_err(|e| format!("release list: {e}"))?;
+    let releases: Vec<Release> = serde_json::from_str(&body).map_err(|e| format!("release list: {e}"))?;
+    let url = releases
+        .into_iter()
+        .flat_map(|r| r.assets)
+        .find(|a| a.name == "latest.json")
+        .ok_or("no published release has latest.json")?
+        .browser_download_url;
+    url.parse().map_err(|e| format!("{url}: {e}"))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateMetadata {
+    rid: tauri::ResourceId,
+    current_version: String,
+    version: String,
+    date: Option<String>,
+    body: Option<String>,
+    raw_json: serde_json::Value,
+}
+
+/// The updater plugin's `check` with a beta channel added (its JS `check()` can't change the
+/// endpoint). Returns what the JS `Update` class takes, so download/install stay the plugin's.
+#[tauri::command]
+async fn check_update(webview: tauri::Webview, beta: bool) -> Result<Option<UpdateMetadata>, String> {
+    let mut builder = webview.updater_builder();
+    if beta {
+        let url = tauri::async_runtime::spawn_blocking(beta_manifest_url)
+            .await
+            .map_err(|e| e.to_string())??;
+        builder = builder.endpoints(vec![url]).map_err(|e| e.to_string())?;
+    }
+    let updater = builder.build().map_err(|e| e.to_string())?;
+    let Some(update) = updater.check().await.map_err(|e| e.to_string())? else {
+        return Ok(None);
+    };
+    Ok(Some(UpdateMetadata {
+        current_version: update.current_version.clone(),
+        version: update.version.clone(),
+        date: None, // only shown by the plugin's own UI helpers, which we don't use
+        body: update.body.clone(),
+        raw_json: update.raw_json.clone(),
+        rid: webview.resources_table().add(update),
+    }))
+}
+
 #[tauri::command]
 fn save_text(path: String, contents: String) -> Result<(), String> {
     std::fs::write(path, contents).map_err(|e| e.to_string())
@@ -243,7 +314,8 @@ pub fn run() {
             autosave_write,
             save_bytes,
             autosave_read,
-            request_location
+            request_location,
+            check_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running WiFiSight");

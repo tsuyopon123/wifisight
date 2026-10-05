@@ -518,11 +518,13 @@ function bind() {
   };
   $("btn-loc").onclick = () => requestLocation();
   $("btn-update").onclick = () => checkForUpdate(true);
-  $<HTMLInputElement>("chk-autoupdate").onchange = (e) => {
-    try {
-      localStorage.setItem("wifisight.autoUpdate", (e.target as HTMLInputElement).checked ? "1" : "0");
-    } catch {}
-  };
+  for (const [id, key] of [["chk-autoupdate", "wifisight.autoUpdate"], ["chk-beta", "wifisight.beta"]]) {
+    $<HTMLInputElement>(id).onchange = (e) => {
+      try {
+        localStorage.setItem(key, (e.target as HTMLInputElement).checked ? "1" : "0");
+      } catch {}
+    };
+  }
   $("st-update").onclick = () => $<HTMLDialogElement>("dlg-settings").showModal();
   $("details").addEventListener("click", async (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-act]");
@@ -666,7 +668,7 @@ async function checkForUpdate(manual: boolean) {
   if (manual) st.textContent = "Checking…";
   btn.disabled = true;
   try {
-    const update = await api.checkUpdate();
+    const update = await api.checkUpdate($<HTMLInputElement>("chk-beta").checked);
     if (!update) {
       if (manual) st.textContent = "Up to date.";
       return;
@@ -708,7 +710,7 @@ async function init() {
   state.os = info.os;
   state.location = info.locationStatus;
   state.installable = info.installable;
-  $<HTMLButtonElement>("btn-update").disabled = $<HTMLInputElement>("chk-autoupdate").disabled = !api.isTauri;
+  for (const id of ["btn-update", "chk-autoupdate", "chk-beta"]) $<HTMLInputElement>(id).disabled = !api.isTauri;
   const loc = info.locationStatus ? ` · location: ${info.locationStatus}` : "";
   $("st-platform").textContent = `${info.os}${info.arch ? "/" + info.arch : ""} · v${info.version}${loc}`;
   $("oui-status").textContent = info.ouiEntries ? `${info.ouiEntries.toLocaleString()} OUIs loaded.` : "Not loaded.";
@@ -740,6 +742,7 @@ async function init() {
   let autoUpdate = true;
   try {
     autoUpdate = localStorage.getItem("wifisight.autoUpdate") !== "0";
+    $<HTMLInputElement>("chk-beta").checked = localStorage.getItem("wifisight.beta") === "1"; // off by default
   } catch {}
   $<HTMLInputElement>("chk-autoupdate").checked = autoUpdate;
   if (api.isTauri && autoUpdate) checkForUpdate(false);
