@@ -716,8 +716,7 @@ async function init() {
   state.location = info.locationStatus;
   state.installable = info.installable;
   for (const id of ["btn-update", "chk-autoupdate", "chk-beta"]) $<HTMLInputElement>(id).disabled = !api.isTauri;
-  const loc = info.locationStatus ? ` · location: ${info.locationStatus}` : "";
-  $("st-platform").textContent = `${info.os}${info.arch ? "/" + info.arch : ""} · v${info.version}${loc}`;
+  $("st-platform").textContent = `${info.os}${info.arch ? "/" + info.arch : ""} · v${info.version}`;
   $("oui-status").textContent = info.ouiEntries ? `${info.ouiEntries.toLocaleString()} OUIs loaded.` : "Not loaded.";
   document.querySelectorAll<HTMLElement>(".loc-row").forEach((el) => (el.hidden = !info.locationStatus));
   if (api.isTauri && !info.ouiEntries) $("btn-oui").click(); // first run: fetch vendor DB without making the user hunt for it
