@@ -110,6 +110,8 @@ wifisight-cli serve               # 外部 Probe として :8737 で待ち受け
 
 `--raw` の出力は、不具合報告や `wifi-core` のテストデータに使えます。
 
+Linux で外部 Probe にするなら、同じページの `wifisight-probe_<バージョン>_<amd64|arm64>.deb` を入れると、CLI と、起動時に `serve` を動かす systemd のサービスが入ります。詳しくは [docs/probe.md](docs/probe.md) を見てください。
+
 ## 開発
 
 ### ビルド

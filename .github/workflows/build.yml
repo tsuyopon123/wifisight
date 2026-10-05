@@ -17,8 +17,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # ubuntu-24.04-arm = aarch64 CLI for the Raspberry Pi probe (docs/probe.md)
-        os: [ubuntu-22.04, ubuntu-24.04-arm, macos-latest, windows-latest]
+        # ubuntu-22.04-arm = aarch64 CLI for the Raspberry Pi probe (docs/probe.md); 22.04 so the
+        # binary needs glibc 2.35 at most (Raspberry Pi OS bookworm has 2.36)
+        os: [ubuntu-22.04, ubuntu-22.04-arm, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -131,6 +132,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7 # scripts/probe-deb.sh
       - uses: actions/download-artifact@v8
       - name: Package
         run: |
@@ -156,10 +158,14 @@ jobs:
             '{version: $v, pub_date: $d, platforms: {
               "darwin-aarch64": $mac, "darwin-x86_64": $mac, "windows-x86_64": $win,
               "linux-x86_64-deb": $deb64, "linux-aarch64-deb": $debarm}}' > out/latest.json
-          for pair in ubuntu-22.04:linux-x86_64 ubuntu-24.04-arm:linux-aarch64 macos-latest:macos-universal; do
+          for pair in ubuntu-22.04:linux-x86_64 ubuntu-22.04-arm:linux-aarch64 macos-latest:macos-universal; do
             src=${pair%%:*} dst=wifisight-cli-${GITHUB_REF_NAME}-${pair##*:}
             chmod +x wifisight-cli-$src/wifisight-cli
             tar -czf out/$dst.tar.gz -C wifisight-cli-$src wifisight-cli -C "$PWD/out" THIRD_PARTY_LICENSES.html
+          done
+          # probe .deb (wifisight-cli + systemd unit); built into out/ only, so the updater's *.deb lookups in bundle-* never see it
+          for pair in ubuntu-22.04:amd64 ubuntu-22.04-arm:arm64; do
+            scripts/probe-deb.sh wifisight-cli-${pair%%:*}/wifisight-cli "${GITHUB_REF_NAME#v}" "${pair##*:}" out
           done
           cp wifisight-cli-windows-latest/wifisight-cli.exe out/wifisight-cli-${GITHUB_REF_NAME}-windows-x86_64.exe
           ls -l out

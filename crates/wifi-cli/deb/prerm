@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+# stop only: whether it is enabled is kept until purge (see postinst)
+if [ "$1" = remove ] && [ -d /run/systemd/system ]; then
+  systemctl stop wifisight-probe.service || true
+fi

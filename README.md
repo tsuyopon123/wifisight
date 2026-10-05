@@ -106,6 +106,8 @@ wifisight-cli serve               # run as an external probe on :8737
 
 `--raw` output is useful for bug reports and as test data for `wifi-core`.
 
+For an external probe on Linux, `wifisight-probe_<version>_<amd64|arm64>.deb` on the same page installs the CLI and a systemd service that runs `serve` on boot. See [docs/probe.md](docs/probe.md) (Japanese).
+
 ## Development
 
 ### Build
