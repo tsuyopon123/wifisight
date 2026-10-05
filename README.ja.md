@@ -128,6 +128,9 @@ npm run tauri build   # 配布用バンドルを作成（.app/.dmg、-setup.exe�
 cargo run -p wifi-cli -- scan   # CLI を実行
 ```
 
+`npm run tauri build` はアプリ内アップデート用のファイルにも署名します。そのため `TAURI_SIGNING_PRIVATE_KEY`（と `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`）を設定していないと、「A public key has been found, but no private key」で失敗します。
+鍵がない場合は、それらのファイルを作らずにビルドしてください：`npm run tauri build -- --config '{"bundle":{"createUpdaterArtifacts":false}}'`
+
 macOS の位置情報の権限は `.app` ごとに付与されるため、`npm run tauri dev` ではターミナルに付与されることがあります。
 確実に試すなら、`npm run tauri build -- --debug` で作った `.app` を起動してください。
 

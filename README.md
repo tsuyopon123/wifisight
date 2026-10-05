@@ -123,6 +123,8 @@ npm run tauri build   # build bundles (.app/.dmg, -setup.exe, .deb)
 cargo run -p wifi-cli -- scan   # run the CLI
 ```
 
+`npm run tauri build` also signs the in-app updater files, so it fails with "A public key has been found, but no private key" unless `TAURI_SIGNING_PRIVATE_KEY` (and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`) is set. Without the key, skip those files: `npm run tauri build -- --config '{"bundle":{"createUpdaterArtifacts":false}}'`.
+
 On macOS, the location permission is granted per `.app`, and with `npm run tauri dev` it may go to your terminal instead. To test reliably, run the `.app` built by `npm run tauri build -- --debug`.
 
 `npm run dev` serves the UI alone at http://localhost:1420. Scanning doesn't work in a browser, so the scan area shows an error.
