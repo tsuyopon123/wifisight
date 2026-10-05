@@ -57,7 +57,8 @@ jobs:
       matrix:
         include:
           - platform: macos-latest
-            args: "--target universal-apple-darwin --bundles dmg"
+            # app: the updater's .app.tar.gz is only made when the app bundle is a target
+            args: "--target universal-apple-darwin --bundles app,dmg"
           - platform: ubuntu-22.04
             args: "--bundles deb"
           - platform: ubuntu-22.04-arm
