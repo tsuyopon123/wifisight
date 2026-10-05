@@ -62,44 +62,83 @@ export function isDfs(b: BssInfo): boolean {
   return hi > 5250 && lo < 5730;
 }
 
-/** Filter: comma separated OR terms; each term is free text or key:value. */
+/**
+ * Filter: `,` separates OR groups; inside a group, space-separated terms must all match. A term is free text,
+ * `key:value`, or a comparison on a number (`rssi<-75`, `ch>=100`, `w>=80`); `!` in front negates it.
+ * Double quotes keep spaces in one term (`ssid:"Free Wi-Fi"`).
+ */
 export function matchFilter(t: Track, query: string): boolean {
-  const q = query.trim();
-  if (!q) return true;
-  const b = t.info;
-  return q
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean)
-    .some((term) => {
-      const m = term.match(/^(\w+):(.*)$/);
-      if (m) {
-        const [, k, v] = m;
-        switch (k) {
-          case "ch":
-            return String(b.channel) === v || String(b.centerChannel) === v;
-          case "band":
-            return b.band === v || b.band === v.replace("ghz", "");
-          case "sec":
-            return b.security.label.toLowerCase().includes(v) || b.security.akms.some((a) => a.toLowerCase().includes(v));
-          case "ssid":
-            return b.ssid.toLowerCase() === v;
-          case "vendor":
-            return (b.vendor ?? "").toLowerCase().includes(v);
-          case "ap":
-            return (b.apName ?? "").toLowerCase().includes(v);
-          case "phy":
-            return b.phyModes.includes(v);
-          case "w":
-          case "width":
-            return String(b.widthMhz) === v;
-          case "rssi":
-            return b.rssiDbm >= Number(v);
-        }
-      }
-      const hay = [b.ssid, b.bssid, b.vendor ?? "", b.apName ?? "", b.model ?? "", b.security.label, b.generation].join(" ").toLowerCase();
-      return hay.includes(term);
-    });
+  if (parsed.query !== query) parsed = { query, groups: parseFilter(query) }; // called once per BSS per render
+  const { groups } = parsed;
+  return !groups.length || groups.some((g) => g.every((term) => matchTerm(t.info, term)));
+}
+let parsed = { query: "", groups: [] as string[][] };
+
+/** Lowercased terms per OR group, quotes removed; empty groups and a bare `!` dropped. */
+export function parseFilter(query: string): string[][] {
+  const groups: string[][] = [[]];
+  let term = "";
+  let quoted = false;
+  const end = () => {
+    if (term && term !== "!") groups[groups.length - 1].push(term);
+    term = "";
+  };
+  for (const c of query.toLowerCase()) {
+    if (c === '"') quoted = !quoted;
+    else if (quoted) term += c;
+    else if (c === ",") {
+      end();
+      groups.push([]);
+    } else if (/\s/.test(c)) end();
+    else term += c;
+  }
+  end();
+  return groups.filter((g) => g.length);
+}
+
+// a Map, so keys like __proto__ typed into the filter can't reach Object.prototype
+const NUMERIC = new Map<string, (b: BssInfo) => number>([
+  ["rssi", (b) => b.rssiDbm],
+  ["ch", (b) => b.channel],
+  ["w", (b) => b.widthMhz],
+  ["width", (b) => b.widthMhz],
+]);
+
+function matchTerm(b: BssInfo, term: string): boolean {
+  if (term.startsWith("!")) return !matchTerm(b, term.slice(1));
+  const cmp = term.match(/^(\w+)(<=|>=|<|>)(-?\d+(?:\.\d+)?)$/);
+  const num = cmp && NUMERIC.get(cmp[1]);
+  if (cmp && num) {
+    const x = num(b), v = Number(cmp[3]);
+    return { "<": x < v, "<=": x <= v, ">": x > v, ">=": x >= v }[cmp[2]]!;
+  }
+  const m = term.match(/^(\w+):(.*)$/);
+  if (m) {
+    const [, k, v] = m;
+    switch (k) {
+      case "ch":
+        return String(b.channel) === v || String(b.centerChannel) === v;
+      case "band":
+        return b.band === v || b.band === v.replace("ghz", "");
+      case "sec":
+        return b.security.label.toLowerCase().includes(v) || b.security.akms.some((a) => a.toLowerCase().includes(v));
+      case "ssid":
+        return b.ssid.toLowerCase() === v;
+      case "vendor":
+        return (b.vendor ?? "").toLowerCase().includes(v);
+      case "ap":
+        return (b.apName ?? "").toLowerCase().includes(v);
+      case "phy":
+        return b.phyModes.includes(v);
+      case "w":
+      case "width":
+        return String(b.widthMhz) === v;
+      case "rssi":
+        return b.rssiDbm >= Number(v);
+    }
+  }
+  const hay = [b.ssid, b.bssid, b.vendor ?? "", b.apName ?? "", b.model ?? "", b.security.label, b.generation].join(" ").toLowerCase();
+  return hay.includes(term);
 }
 
 // How the vendor was derived (suffix set by wifi-core) → shown as a tag, like DFS in the Ch column.

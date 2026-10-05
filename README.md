@@ -41,7 +41,7 @@ It runs on macOS, Windows, and Linux. All parsing happens in the shared `wifi-co
 - **CLI**: the same analysis as the GUI, as a table, JSON, or a JSONL log
 - **Export**: CSV and JSON
 
-Filter the list with expressions like `ch:36, sec:wpa3, band:6`. Press `?` in the app for the full filter syntax and keyboard shortcuts.
+Filter the list with expressions like `band:5 !sec:open, rssi<-75` (space = AND, comma = OR, `!` = NOT). Press `?` in the app for the full filter syntax and keyboard shortcuts.
 
 ## Install
 
