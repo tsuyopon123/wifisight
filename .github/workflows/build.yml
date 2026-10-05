@@ -108,12 +108,6 @@ jobs:
           fi
           echo "$conf" > "$RUNNER_TEMP/override.json"
           npm run tauri build -- ${{ matrix.args }} --config "$RUNNER_TEMP/override.json"
-          # the updater installs .deb too, but the bundler may not sign it
-          if [[ -n $TAURI_SIGNING_PRIVATE_KEY ]]; then
-            for f in target/release/bundle/deb/*.deb; do
-              if [[ -e $f && ! -e $f.sig ]]; then npx tauri signer sign "$f"; fi
-            done
-          fi
       - uses: actions/upload-artifact@v7
         with:
           name: bundle-${{ matrix.platform }}
