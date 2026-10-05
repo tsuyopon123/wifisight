@@ -51,6 +51,9 @@ const NL80211_BSS_BEACON_IES: u16 = 11;
 const NL80211_SURVEY_INFO_FREQUENCY: u16 = 1;
 const NL80211_SURVEY_INFO_NOISE: u16 = 2;
 
+/// (ifindex, ifname, iftype, MAC) from NL80211_CMD_GET_INTERFACE.
+type IfaceInfo = (u32, String, u32, Option<[u8; 6]>);
+
 struct Sock {
     fd: i32,
     seq: u32,
@@ -283,7 +286,7 @@ impl Nl80211 {
         })
     }
 
-    fn interfaces(&mut self) -> Result<Vec<(u32, String, u32, Option<[u8; 6]>)>, ScanError> {
+    fn interfaces(&mut self) -> Result<Vec<IfaceInfo>, ScanError> {
         let replies = self
             .sock
             .request(self.family, NL80211_CMD_GET_INTERFACE, true, &[])
