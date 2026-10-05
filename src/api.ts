@@ -1,7 +1,7 @@
 // Backend abstraction: Tauri commands when running in the app. In a plain
 // browser (`npm run dev`) the UI loads but scanning reports an error.
 
-import type { Interface, PlatformInfo, Snapshot } from "./types";
+import type { Interface, PlatformInfo, ProbeInfo, Snapshot } from "./types";
 
 export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -16,6 +16,11 @@ export async function platformInfo(): Promise<PlatformInfo> {
 }
 
 const DESKTOP_ONLY = "Scanning is only available in the desktop app";
+
+export async function probeInfo(probe: string): Promise<ProbeInfo | null> {
+  if (isTauri) return invoke("probe_info", { probe });
+  throw new Error(DESKTOP_ONLY);
+}
 
 export async function listInterfaces(probe: string | null): Promise<Interface[]> {
   if (isTauri) return invoke("list_interfaces", { probe });

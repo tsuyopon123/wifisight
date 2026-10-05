@@ -82,17 +82,25 @@ fn probe_get<T: serde::de::DeserializeOwned>(probe: &str, path: &str) -> Result<
         .get(&url)
         .call()
         .map_err(|e| format!("probe {base} unreachable: {e}"))?;
-    let ok = res.status().is_success();
+    let status = res.status();
     let body = res
         .body_mut()
         .with_config()
         .limit(64 * 1024 * 1024)
         .read_to_string()
         .map_err(|e| format!("probe {base}: {e}"))?;
-    if !ok {
-        return Err(format!("probe {base}: {body}"));
+    if !status.is_success() {
+        return Err(format!("probe {base}: HTTP {}: {body}", status.as_u16()));
     }
     serde_json::from_str(&body).map_err(|e| format!("probe {base}: bad response: {e}"))
+}
+
+/// Probe health check (`GET /`): app name, version, OS.
+#[tauri::command]
+async fn probe_info(probe: String) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || probe_get(&probe, "/"))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -308,6 +316,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             platform_info,
             list_interfaces,
+            probe_info,
             scan,
             update_oui_db,
             save_text,
