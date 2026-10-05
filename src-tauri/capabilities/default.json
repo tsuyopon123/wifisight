@@ -7,7 +7,7 @@
   ],
   "permissions": [
     "core:default",
-    "dialog:default",
+    "dialog:allow-message",
     "updater:default",
     "process:allow-restart",
     {

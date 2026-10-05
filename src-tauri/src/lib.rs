@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Manager, State};
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_updater::UpdaterExt;
 use wifi_core::{analyze, BssInfo, OuiDb};
 use wifi_scan::{Interface, ScanOptions};
@@ -260,14 +261,47 @@ async fn check_update(webview: tauri::Webview, beta: bool) -> Result<Option<Upda
     }))
 }
 
-#[tauri::command]
-fn save_text(path: String, contents: String) -> Result<(), String> {
-    std::fs::write(path, contents).map_err(|e| e.to_string())
+/// Ask where to save with the native dialog, then write there. The webview never names the path,
+/// so it can only write where the user picked. `None` = cancelled.
+fn save_with_dialog(
+    window: &tauri::Window,
+    name: &str,
+    ext: &str,
+    contents: &[u8],
+) -> Result<Option<String>, String> {
+    let Some(path) = window
+        .dialog()
+        .file()
+        .set_parent(window)
+        .set_file_name(name)
+        .add_filter(ext.to_uppercase(), &[ext])
+        .blocking_save_file() // async command: off the main thread, like the plugin's own save
+    else {
+        return Ok(None);
+    };
+    let path = path.into_path().map_err(|e| e.to_string())?;
+    std::fs::write(&path, contents).map_err(|e| e.to_string())?;
+    Ok(Some(path.display().to_string()))
 }
 
 #[tauri::command]
-fn save_bytes(path: String, contents: Vec<u8>) -> Result<(), String> {
-    std::fs::write(path, contents).map_err(|e| e.to_string())
+async fn save_text(
+    window: tauri::Window,
+    name: String,
+    ext: String,
+    contents: String,
+) -> Result<Option<String>, String> {
+    save_with_dialog(&window, &name, &ext, contents.as_bytes())
+}
+
+#[tauri::command]
+async fn save_bytes(
+    window: tauri::Window,
+    name: String,
+    ext: String,
+    contents: Vec<u8>,
+) -> Result<Option<String>, String> {
+    save_with_dialog(&window, &name, &ext, &contents)
 }
 
 /// Survey autosave in the app data dir, so a long walk survives a crash / reload.

@@ -59,13 +59,10 @@ export async function requestLocation(): Promise<void> {
 
 export async function saveFile(defaultName: string, contents: string | Uint8Array, ext: string): Promise<string | null> {
   if (isTauri) {
-    const dialog = await import("@tauri-apps/plugin-dialog");
-    const path = await dialog.save({ defaultPath: defaultName, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] });
-    if (!path) return null;
+    // the backend asks where to save and writes only there; null = cancelled
+    if (typeof contents === "string") return invoke("save_text", { name: defaultName, ext, contents });
     // ponytail: bytes go over IPC as a JSON number array; fine for a few-MB PNG, use a raw-body command if it gets slow.
-    if (typeof contents === "string") await invoke("save_text", { path, contents });
-    else await invoke("save_bytes", { path, contents: Array.from(contents) });
-    return path;
+    return invoke("save_bytes", { name: defaultName, ext, contents: Array.from(contents) });
   }
   const type = { csv: "text/csv", png: "image/png" }[ext] ?? "application/json";
   const blob = new Blob([contents as BlobPart], { type });
