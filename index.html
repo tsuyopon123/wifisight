@@ -28,7 +28,7 @@
           <button data-band="5" class="on" aria-pressed="true">5</button>
           <button data-band="6" class="on" aria-pressed="true">6</button>
         </div>
-        <input id="filter" type="search" aria-label="Filter (see Help for the syntax)" placeholder="Filter  ch:36, sec:wpa3, band:6 …" title="Free text matches SSID / BSSID / vendor / AP. Keys: ch: band: sec: ssid: vendor: ap: phy: w: rssi:. Comma = OR. Help (?) lists them all." />
+        <input id="filter" type="search" aria-label="Filter (see Help for the syntax)" placeholder="Filter  ch:36, sec:wpa3, band:6 …" title="Free text matches SSID / BSSID / vendor / AP. Keys: ch: band: sec: ssid: vendor: ap: phy: w: rssi:, comparisons like rssi&lt;-75. Space = AND, comma = OR, ! = NOT. Help (?) lists them all." />
         <label class="check" title="Include networks that hide their SSID"><input type="checkbox" id="chk-hidden" checked /> hidden SSIDs</label>
         <label class="check scanner-only"><input type="checkbox" id="chk-stale" /> only current</label>
         <label class="check scanner-only"><input type="checkbox" id="chk-charts" checked /> charts</label>
@@ -244,7 +244,7 @@
           <dt><kbd>H</kbd></dt><dd>Hand tool (drag pans, clicks don't add points)</dd>
           <dt><kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd></dt><dd>Zoom in / out / fit</dd>
         </dl>
-        <h3>Filter (comma = OR)</h3>
+        <h3>Filter (space = AND, comma = OR)</h3>
         <dl>
           <dt>free text</dt><dd>SSID, BSSID, vendor, AP name, security, generation</dd>
           <dt><code>ch:36</code> <code>band:6</code></dt><dd>Channel (or center channel) / band</dd>
@@ -253,6 +253,10 @@
           <dt><code>vendor:</code> <code>ap:</code></dt><dd>Vendor / AP name contains</dd>
           <dt><code>phy:be</code> <code>w:160</code></dt><dd>PHY mode / channel width (MHz)</dd>
           <dt><code>rssi:-70</code></dt><dd>Signal at or above (dBm)</dd>
+          <dt><code>rssi&lt;-75</code> <code>ch&gt;=100</code> <code>w&gt;=80</code></dt><dd>Compare signal, channel or width with <code>&lt;</code> <code>&lt;=</code> <code>&gt;</code> <code>&gt;=</code></dd>
+          <dt><code>!sec:open</code></dt><dd>NOT: hide what the term matches</dd>
+          <dt><code>band:5 sec:wpa3</code></dt><dd>AND: every term must match</dd>
+          <dt><code>ssid:"Free Wi-Fi"</code></dt><dd>Quotes keep spaces in one term</dd>
         </dl>
         <div class="dlg-actions">
           <button value="close" class="primary">Done</button>
