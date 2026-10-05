@@ -34,7 +34,7 @@ const state = {
 const chart = new ChartView($<HTMLCanvasElement>("chart"));
 let timer: number | undefined;
 let scanning = false;
-let gen = 0; // bumped by clearSession; scans started before it are dropped
+let gen = 0; // bumped by dropScans; scans started before it are dropped
 
 function passesFilters(t: Track): boolean {
   return state.bands.has(t.info.band) && (state.showHidden || !t.info.hidden) && matchFilter(t, state.filter);
@@ -210,6 +210,7 @@ async function scanOnce() {
       survey.onScanError(x.title);
     }
   } finally {
+    if (g !== gen) survey.onScanDropped();
     scanning = false;
     render();
   }
@@ -219,12 +220,21 @@ async function scanOnce() {
   }
 }
 
+/** Void every scan so far, finished or in flight: the user may have moved, or the radio changed. */
+function dropScans() {
+  gen++;
+  survey.onScanReset();
+}
+
 function setRunning(on: boolean) {
   state.running = on;
   $("btn-run").textContent = on ? "Pause" : "Start";
   window.clearTimeout(timer);
-  if (on) scanOnce();
-  else render();
+  if (on) {
+    dropScans(); // the user may have moved while paused
+    scanOnce();
+  }
+  render();
 }
 
 // ───────────────────────── events ─────────────────────────
@@ -620,10 +630,10 @@ function clearSession() {
   state.connLabel = "";
   state.lastError = "";
   $("st-warn").textContent = "";
-  gen++;
+  dropScans();
   window.clearTimeout(timer);
   if (state.running) scanOnce();
-  else render();
+  render();
 }
 
 async function loadInterfaces() {
