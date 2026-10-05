@@ -150,6 +150,7 @@ The per-OS scanners only collect raw BSS data and IEs; all parsing happens in th
 ```sh
 cargo test -p wifi-core -p wifi-scan -p wifi-cli
 npm run check                # UI self-checks (src/*.check.ts)
+npm run e2e                  # survey UI in headless Chrome (needs Chrome; set CHROME if it isn't found)
 ```
 
 GitHub Actions runs the tests on macOS, Windows, and Ubuntu and builds the CLI and GUI bundles. Pushing a `v*` tag creates a draft release with the bundles attached.

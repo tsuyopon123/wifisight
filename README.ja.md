@@ -159,6 +159,7 @@ macOS の位置情報の権限は `.app` ごとに付与されるため、`npm r
 ```sh
 cargo test -p wifi-core -p wifi-scan -p wifi-cli
 npm run check                # UI の自己チェック（src/*.check.ts）
+npm run e2e                  # サーベイ画面を headless Chrome で確認（Chrome が必要。見つからなければ CHROME にパスを設定）
 ```
 
 GitHub Actions が macOS、Windows、Ubuntu でテストを実行し、CLI と GUI のバンドルを作ります。
