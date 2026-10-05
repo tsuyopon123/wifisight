@@ -518,6 +518,12 @@ function bind() {
   };
   $("btn-loc").onclick = () => requestLocation();
   $("btn-update").onclick = () => checkForUpdate(true);
+  $<HTMLInputElement>("chk-autoupdate").onchange = (e) => {
+    try {
+      localStorage.setItem("wifisight.autoUpdate", (e.target as HTMLInputElement).checked ? "1" : "0");
+    } catch {}
+  };
+  $("st-update").onclick = () => $<HTMLDialogElement>("dlg-settings").showModal();
   $("details").addEventListener("click", async (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-act]");
     const act = btn?.dataset.act;
@@ -650,7 +656,10 @@ async function loadInterfaces() {
   }
 }
 
-/** manual = the Settings button: report every outcome. On startup, stay quiet unless there is an update. */
+/**
+ * manual = the Settings button: report every outcome and offer to install.
+ * On launch, only mark a newer version in the status bar; installing is always the user's click.
+ */
 async function checkForUpdate(manual: boolean) {
   const st = $("update-status");
   const btn = $<HTMLButtonElement>("btn-update");
@@ -663,6 +672,9 @@ async function checkForUpdate(manual: boolean) {
       return;
     }
     st.textContent = `v${update.version} is available.`;
+    $("st-update").textContent = `v${update.version} available`;
+    $("st-update").hidden = false;
+    if (!manual) return;
     if (!state.installable) {
       if (await api.ask(`WiFiSight v${update.version} is available. Open the download page?`)) await api.openReleases();
       return;
@@ -696,7 +708,7 @@ async function init() {
   state.os = info.os;
   state.location = info.locationStatus;
   state.installable = info.installable;
-  $<HTMLButtonElement>("btn-update").disabled = !api.isTauri;
+  $<HTMLButtonElement>("btn-update").disabled = $<HTMLInputElement>("chk-autoupdate").disabled = !api.isTauri;
   const loc = info.locationStatus ? ` · location: ${info.locationStatus}` : "";
   $("st-platform").textContent = `${info.os}${info.arch ? "/" + info.arch : ""} · v${info.version}${loc}`;
   $("oui-status").textContent = info.ouiEntries ? `${info.ouiEntries.toLocaleString()} OUIs loaded.` : "Not loaded.";
@@ -724,7 +736,13 @@ async function init() {
   });
   render();
   scanOnce();
-  if (api.isTauri) checkForUpdate(false);
+  // on by default; launch only marks the status bar, never prompts
+  let autoUpdate = true;
+  try {
+    autoUpdate = localStorage.getItem("wifisight.autoUpdate") !== "0";
+  } catch {}
+  $<HTMLInputElement>("chk-autoupdate").checked = autoUpdate;
+  if (api.isTauri && autoUpdate) checkForUpdate(false);
   // refresh "last seen" ages and the time axis between scans
   setInterval(() => {
     if (state.tab === "signal") renderChart();

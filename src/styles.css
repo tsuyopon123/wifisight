@@ -711,6 +711,16 @@ table.mini th.num {
   white-space: nowrap;
   overflow: hidden;
 }
+.statusbar .st-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin-left: 6px;
+  color: var(--accent);
+}
+.statusbar .st-link:hover {
+  text-decoration: underline;
+}
 .statusbar .warn {
   color: var(--warn);
   overflow: hidden;
@@ -1217,6 +1227,9 @@ dialog p {
 }
 .settings select {
   justify-self: start;
+}
+.settings .check {
+  margin-top: 6px;
 }
 .settings .hint {
   margin: 4px 0 0;
