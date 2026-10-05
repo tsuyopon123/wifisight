@@ -667,9 +667,11 @@ async function checkForUpdate(manual: boolean) {
   const btn = $<HTMLButtonElement>("btn-update");
   if (manual) st.textContent = "Checking…";
   btn.disabled = true;
+  let failed = "Update check failed";
   try {
     const update = await api.checkUpdate($<HTMLInputElement>("chk-beta").checked);
     if (!update) {
+      $("st-update").hidden = true; // e.g. a beta found earlier, before "Include beta releases" was turned off
       if (manual) st.textContent = "Up to date.";
       return;
     }
@@ -682,6 +684,7 @@ async function checkForUpdate(manual: boolean) {
       return;
     }
     if (!(await api.ask(`WiFiSight v${update.version} is available. Update and restart now?\nSurvey data is autosaved.`))) return;
+    failed = "Update failed";
     let total = 0;
     let got = 0;
     await update.downloadAndInstall((e) => {
@@ -692,7 +695,9 @@ async function checkForUpdate(manual: boolean) {
     });
     await api.relaunch(); // Windows: the NSIS installer has already closed the app
   } catch (e) {
-    if (manual) st.textContent = `Update check failed: ${e}`;
+    if (manual) st.textContent = `${failed}: ${e}`;
+    // replace "Installing update…" in the status bar, which stays while scanning is paused
+    if (failed === "Update failed") $("st-warn").textContent = st.textContent;
   } finally {
     btn.disabled = !api.isTauri;
   }
