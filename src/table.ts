@@ -220,7 +220,7 @@ export function renderBody(tbody: HTMLElement, rows: Track[], st: TableState, no
       const cls = [t.info.bssid === st.selected ? "sel" : "", t.lastSeen < latestScan ? "stale" : ""].join(" ");
       return (
         `<tr data-bssid="${t.info.bssid}" class="${cls}">` +
-        cols.map((c) => `<td class="${c.num ? "num" : ""} ${c.mono ? "mono" : ""}"${widthStyle(c)}>${c.html(t, now)}</td>`).join("") +
+        cols.map((c) => `<td data-k="${c.key}" class="${c.num ? "num" : ""} ${c.mono ? "mono" : ""}"${widthStyle(c)}>${c.html(t, now)}</td>`).join("") +
         "</tr>"
       );
     })

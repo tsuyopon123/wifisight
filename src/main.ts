@@ -13,7 +13,8 @@ const state = {
   intervalMs: 0,
   iface: null as string | null,
   probe: null as string | null,
-  mode: "scanner" as "scanner" | "survey",
+  // channels: phone-only view of the channel charts (the scanner table hides them on narrow screens)
+  mode: "scanner" as "scanner" | "channels" | "survey",
   bands: new Set<Band>(["2.4", "5", "6"]),
   filter: "",
   showHidden: true,
@@ -570,7 +571,7 @@ function bind() {
       return setRunning(!state.running);
     }
     if (e.key === "?") return $("btn-help").click();
-    if (state.mode !== "scanner") return;
+    if (state.mode === "survey") return;
     if (e.key === "v") {
       const sel = state.table.selected ? state.tracks.get(state.table.selected) : undefined;
       if (sel) {
@@ -597,10 +598,13 @@ function setMode(mode: typeof state.mode) {
   state.mode = mode;
   document.querySelectorAll<HTMLElement>("#mode-seg button").forEach((x) => setOn(x, x.dataset.mode === mode));
   document.body.classList.toggle("mode-survey", mode === "survey");
-  $("main").hidden = mode !== "scanner";
+  document.body.classList.toggle("mode-channels", mode === "channels");
+  $("main").hidden = mode === "survey";
   $("survey").hidden = mode !== "survey";
   survey.setActive(mode === "survey");
-  if (mode === "scanner") render();
+  // the channels view has no room for the signal history: open on a band chart
+  if (mode === "channels" && state.tab === "signal") $("tabs").querySelector<HTMLElement>('button[data-tab="2.4"]')!.click();
+  if (mode !== "survey") render();
 }
 
 const THEMES = ["", "dark", "light"]; // "" = follow the OS

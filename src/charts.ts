@@ -36,7 +36,7 @@ function setup(canvas: HTMLCanvasElement): Ctx {
   c.clearRect(0, 0, w, h);
   const v = getComputedStyle(document.documentElement);
   const g = (k: string) => v.getPropertyValue(k).trim();
-  c.font = "11px " + g("--sans");
+  c.font = g("--chart-font") + " " + g("--sans");
   return { c, w, h, fg: g("--fg"), fg2: g("--fg-2"), fg3: g("--fg-3"), line: g("--line"), bg3: g("--bg-3"), accent: g("--accent") };
 }
 
@@ -286,7 +286,7 @@ export class ChartView {
       c.fillStyle = x.fg2;
       c.textAlign = "left";
       c.textBaseline = "top";
-      c.font = "600 11px " + getComputedStyle(document.documentElement).getPropertyValue("--sans");
+      c.font = "600 " + getComputedStyle(document.documentElement).getPropertyValue("--chart-font") + " " + getComputedStyle(document.documentElement).getPropertyValue("--sans");
       c.fillText(`${band} GHz`, 6, y0 + 2);
       c.font = "10px " + getComputedStyle(document.documentElement).getPropertyValue("--sans");
       c.fillStyle = x.fg3;
