@@ -343,7 +343,7 @@ try {
     await ev(`window.__mock.link = { ...window.__mock.link, bssid: "aa:bb:cc:dd:ee:02", rssiDbm: -48, txMbps: 1200 }`);
     await waitFor(`!document.getElementById("st-roams").hidden`, 5000);
     check("L2 status bar counts the roam", await ev(`document.getElementById("st-roams").textContent`), "1 roam");
-    check("L3 status bar shows the rates", (await ev(`document.getElementById("st-scan").textContent`)).includes("tx 1200 Mbps · MCS 11×2"), true);
+    check("L3 status bar shows the rates", (await ev(`document.getElementById("st-scan").textContent`)).includes("tx 1200 Mbps · MCS 11 (2 streams)"), true);
     await ev(`document.getElementById("st-roams").click()`);
     const row = await ev(`[...document.querySelectorAll("#roams-table tbody td")].slice(1).map((td) => td.textContent).join("|")`);
     check("L4 log row names the old AP from the scan", row, "roam|hall-1 (aa:bb:cc:dd:ee:01)|aa:bb:cc:dd:ee:02|-70 → -48|867 → 1200|");

@@ -21,7 +21,8 @@ assert.equal(g.size, 1);
 
 // status text shows only what the OS reported
 assert.equal(linkText(l("a")), "tx 867 Mbps");
-assert.equal(linkText(l("a", { rxMbps: 780, mcs: 11, nss: 2 })), "tx 867 / rx 780 Mbps · MCS 11×2");
+assert.equal(linkText(l("a", { rxMbps: 780, mcs: 11, nss: 2 })), "tx 867 / rx 780 Mbps · MCS 11 (2 streams)");
+assert.equal(linkText(l("a", { txMbps: null, mcs: 7, nss: 1 })), "MCS 7 (1 stream)");
 assert.equal(linkText(l("a", { txMbps: null })), "");
 
 // CSV: header + one row per event, names quoted when needed

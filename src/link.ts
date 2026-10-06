@@ -16,7 +16,7 @@ export function linkChange(prev: LinkInfo | null, next: LinkInfo | null, t: numb
 
 export const eventKind = (e: LinkEvent) => (!e.from ? "connect" : !e.to ? "disconnect" : "roam");
 
-/** "tx 866 / rx 780 Mbps · MCS 11×2", only the parts the OS reported. */
+/** "tx 866 / rx 780 Mbps · MCS 11 (2 streams)", only the parts the OS reported. */
 export function linkText(l: LinkInfo): string {
   const r = (v: number) => Math.round(v);
   const rate =
@@ -27,7 +27,7 @@ export function linkText(l: LinkInfo): string {
         : l.rxMbps != null
           ? `rx ${r(l.rxMbps)} Mbps`
           : "";
-  const mcs = l.mcs != null ? `MCS ${l.mcs}${l.nss ? `×${l.nss}` : ""}` : "";
+  const mcs = l.mcs != null ? `MCS ${l.mcs}${l.nss ? ` (${l.nss} stream${l.nss === 1 ? "" : "s"})` : ""}` : "";
   return [rate, mcs].filter(Boolean).join(" · ");
 }
 
