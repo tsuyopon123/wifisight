@@ -135,3 +135,25 @@ export interface Track {
   hidden: boolean; // hidden from charts by the user
   mlo?: boolean; // connected as one of ≥2 links of the same AP MLD in the latest scan
 }
+
+/** Current association (`link_info`); fields the OS doesn't expose are null. */
+export interface LinkInfo {
+  bssid: string; // on Linux MLO: the AP MLD address
+  ssid: string | null;
+  rssiDbm: number | null;
+  txMbps: number | null;
+  rxMbps: number | null;
+  mcs: number | null;
+  nss: number | null;
+}
+
+/** BSSID change between two link polls; from = null is a connect, to = null a disconnect. */
+export interface LinkEvent {
+  t: number;
+  from: string | null;
+  to: string | null;
+  rssiBefore: number | null;
+  rssiAfter: number | null;
+  txBefore: number | null;
+  txAfter: number | null;
+}
