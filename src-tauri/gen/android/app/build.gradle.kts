@@ -14,6 +14,12 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// Release signing key (not committed): see docs/android.md. Without it the release APK is unsigned.
+val keystoreFile = rootProject.file("keystore.properties")
+val keystore = Properties().apply {
+    if (keystoreFile.exists()) keystoreFile.inputStream().use { load(it) }
+}
+
 android {
     compileSdk = 37
     namespace = "dev.tsuyopon.wifisight"
@@ -24,6 +30,14 @@ android {
         targetSdk = 37
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+    }
+    signingConfigs {
+        if (keystoreFile.exists()) create("release") {
+            storeFile = file(keystore.getProperty("storeFile"))
+            storePassword = keystore.getProperty("password")
+            keyAlias = keystore.getProperty("keyAlias")
+            keyPassword = keystore.getProperty("password")
+        }
     }
     buildTypes {
         getByName("debug") {
@@ -39,6 +53,7 @@ android {
             }
         }
         getByName("release") {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             optimization {
                enable = true
             }
