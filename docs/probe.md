@@ -88,13 +88,19 @@ Probe の応答は CLI からも確認できる。
 curl wifiprobe.local:8737/scan | jq '.bss | length'
 ```
 
-API は次の 3 つである。
+API は次の 4 つである。
 
 | エンドポイント | 内容 |
 |---|---|
 | `GET /` | ヘルスチェック（アプリ名、バージョン、OS） |
 | `GET /interfaces` | Wi-Fi インターフェースの一覧 |
 | `GET /scan?iface=wlan0` | スキャン結果 |
+| `GET /link?iface=wlan0` | 接続中のリンク（BSSID、送受信レート、MCS、NSS）。未接続なら `null` |
+
+GUI は `/link` を 1 秒ごとに呼び、ステータスバーとローミングログに使う。
+Probe はふだん未接続で計測するので `null` が返る。
+Probe の位置でローミング試験をするときは、Probe を試験する SSID に接続しておく（例: `nmcli device wifi connect <SSID>`）。
+古い Probe は `/link` に 404 を返すが、GUI はそれを無視するのでスキャンには影響しない。
 
 ## セキュリティ
 
