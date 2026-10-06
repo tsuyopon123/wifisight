@@ -1384,7 +1384,41 @@ button.icon-label svg {
     width: 1400px;
   }
   #chart-pane[data-tab="6"] #chart {
-    width: 2200px;
+    width: 1600px;
+  }
+  #chart-pane > .canvas-wrap {
+    grid-area: 2 / 1; /* shares its cell with #chart-more instead of being pushed to a new row */
+  }
+  #chart-more {
+    display: none;
+  }
+  #chart-pane:is([data-tab="5"], [data-tab="6"]):not(.at-end) #chart-more {
+    display: flex;
+  }
+  #chart-more {
+    grid-row: 2;
+    grid-column: 1;
+    align-self: center;
+    justify-self: end;
+    z-index: 2;
+    align-items: center;
+    gap: 8px;
+    margin-right: 8px;
+    min-height: 0;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--line-2);
+    background: color-mix(in srgb, var(--bg-2) 88%, transparent);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    font-size: 26px;
+    line-height: 1;
+  }
+  #chart-more .hint {
+    font-size: 13.5px;
+    color: var(--fg-2);
+  }
+  .chart-swiped #chart-more .hint {
+    display: none;
   }
   #chart-pane:is([data-tab="5"], [data-tab="6"]) #chart-axis {
     display: block;

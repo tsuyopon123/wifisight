@@ -217,6 +217,12 @@ function renderChart() {
     axis.getContext("2d")!.drawImage(src, 0, 0, axis.width, axis.height, 0, 0, axis.width, axis.height);
   }
   $("history-field").style.visibility = state.tab === "signal" ? "visible" : "hidden";
+  chartAtEnd();
+}
+
+function chartAtEnd() {
+  const w = $("chart").parentElement!;
+  $("chart-pane").classList.toggle("at-end", w.scrollLeft + w.clientWidth >= w.scrollWidth - 4);
 }
 
 async function scanOnce() {
@@ -272,6 +278,26 @@ function bind() {
   $("btn-run").onclick = () => setRunning(!state.running);
   for (const el of [$("table-wrap"), $("chart").parentElement!])
     el.addEventListener("scroll", () => (scrolledAt = performance.now()), { passive: true });
+  // phones: the › on the wide 5 / 6 GHz charts says there's more to the right (and scrolls there);
+  // its "Swipe for more" hint goes once the user has scrolled a chart
+  const chartWrap = $("chart").parentElement!;
+  chartWrap.addEventListener(
+    "scroll",
+    () => {
+      chartAtEnd();
+      if (chartWrap.scrollLeft > 0 && !document.body.classList.contains("chart-swiped")) {
+        document.body.classList.add("chart-swiped");
+        try {
+          localStorage.setItem("wifisight.chartSwiped", "1");
+        } catch {}
+      }
+    },
+    { passive: true },
+  );
+  try {
+    if (localStorage.getItem("wifisight.chartSwiped")) document.body.classList.add("chart-swiped");
+  } catch {}
+  $("chart-more").onclick = () => chartWrap.scrollBy({ left: chartWrap.clientWidth * 0.8, behavior: "smooth" });
   $<HTMLSelectElement>("sel-interval").onchange = (e) => {
     state.intervalMs = Number((e.target as HTMLSelectElement).value);
     survey.render(); // time per point depends on it
@@ -440,6 +466,7 @@ function bind() {
     if (!b) return;
     state.tab = b.dataset.tab as Tab;
     $("chart-pane").dataset.tab = state.tab; // phones: the 5 / 6 GHz charts are wider than the screen
+    $("chart").parentElement!.scrollLeft = 0; // each band starts at its lowest channel
     document.querySelectorAll("#tabs button[data-tab]").forEach((x) => setOn(x, x === b));
     renderChart();
   };
