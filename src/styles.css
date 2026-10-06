@@ -1308,18 +1308,48 @@ button.icon-label svg {
     display: none;
   }
 
-  /* toolbar: Export / Settings / Help on the first row, the scan controls wrapping below */
+  /* toolbar: just the mode switch and ☰; ☰ opens every other control below it */
   .toolbar {
     flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
     padding: 6px 10px;
   }
+  .tb-main,
   .tb-end {
-    margin-left: auto;
+    display: contents;
   }
-  .tb-main {
+  #mode-seg {
+    flex: 1 1 calc(100% - 64px); /* the row is the switch and ☰ only, opened controls wrap below */
+  }
+  #mode-seg button {
+    flex: 1;
+  }
+  #btn-more {
     order: 1;
-    flex-basis: 100%;
-    gap: 8px 10px;
+  }
+  :is(.tb-main, .tb-end) > :not(#mode-seg) {
+    order: 2;
+  }
+  body:not(.more-open) :is(.tb-main, .tb-end) > :not(#mode-seg) {
+    display: none !important;
+  }
+  #btn-more {
+    position: relative;
+  }
+  #btn-more.filtered::after {
+    content: "";
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .more-open #btn-more {
+    background: var(--bg-2);
+    border-color: var(--accent);
   }
   #filter {
     flex-basis: 100%;

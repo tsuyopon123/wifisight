@@ -84,6 +84,8 @@ function ingest(s: Snapshot) {
 
 function render() {
   survey.render();
+  // phones: flag a narrowed list while the controls are tucked behind ☰
+  $("btn-more").classList.toggle("filtered", !!state.filter.trim() || state.bands.size < 3 || !state.showHidden || state.onlyCurrent);
   const rows = sortTracks(visibleTracks(), state.table);
   const now = Date.now();
   const thead = $("bss-table").querySelector("thead")!;
@@ -485,6 +487,11 @@ function bind() {
     renderNotice();
   }, 1000);
   $("btn-help").onclick = () => $<HTMLDialogElement>("dlg-help").showModal();
+  // phones: the toolbar shows only the mode switch until ☰ opens the rest
+  $("btn-more").onclick = () => {
+    const open = document.body.classList.toggle("more-open");
+    $("btn-more").setAttribute("aria-expanded", String(open));
+  };
   const theme = $<HTMLSelectElement>("sel-theme");
   theme.value = document.documentElement.dataset.theme ?? "";
   theme.onchange = () => setTheme(theme.value);
