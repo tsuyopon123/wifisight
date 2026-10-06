@@ -2,6 +2,7 @@ package dev.tsuyopon.wifisight
 
 import android.os.Bundle
 import android.view.View
+import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -19,5 +20,12 @@ class MainActivity : TauriActivity() {
       v.setPadding(b.left, b.top, b.right, b.bottom)
       WindowInsetsCompat.CONSUMED
     }
+  }
+
+  // Autofill / content capture make the WebView rebuild its accessibility tree on every frame
+  // (~30 ms on a Pixel 6a while scrolling); nothing here needs either.
+  override fun onWebViewCreate(webView: WebView) {
+    webView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+    webView.importantForContentCapture = View.IMPORTANT_FOR_CONTENT_CAPTURE_NO_EXCLUDE_DESCENDANTS
   }
 }
