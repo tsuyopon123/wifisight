@@ -8,8 +8,6 @@
   "permissions": [
     "core:default",
     "dialog:allow-message",
-    "updater:default",
-    "process:allow-restart",
     {
       "identifier": "opener:allow-open-url",
       "allow": [

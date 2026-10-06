@@ -4,12 +4,14 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Manager, State};
 use tauri_plugin_dialog::DialogExt;
+#[cfg(desktop)]
 use tauri_plugin_updater::UpdaterExt;
 use wifi_core::{analyze, BssInfo, OuiDb};
 use wifi_scan::{Interface, ScanOptions};
 
 const OUI_URL: &str = "https://standards-oui.ieee.org/oui/oui.csv";
 /// Published releases, newest first, pre-releases included (drafts are hidden without auth).
+#[cfg(desktop)]
 const RELEASES_API: &str = "https://api.github.com/repos/tsuyopon123/wifisight/releases?per_page=20";
 
 struct AppState {
@@ -60,9 +62,10 @@ fn platform_info(app: tauri::AppHandle, state: State<'_, AppState>) -> PlatformI
             .as_ref()
             .map(|d| d.len())
             .unwrap_or(0),
-        installable: !cfg!(windows)
-            || std::env::current_exe()
-                .is_ok_and(|p| p.with_file_name("uninstall.exe").exists()),
+        installable: cfg!(desktop)
+            && (!cfg!(windows)
+                || std::env::current_exe()
+                    .is_ok_and(|p| p.with_file_name("uninstall.exe").exists())),
     }
 }
 
@@ -193,6 +196,7 @@ async fn update_oui_db(state: State<'_, AppState>) -> Result<usize, String> {
     .map_err(|e| e.to_string())?
 }
 
+#[cfg(desktop)]
 /// latest.json of the newest published release, betas included. The stable channel instead
 /// uses the configured releases/latest endpoint, which skips pre-releases.
 fn beta_manifest_url() -> Result<tauri::Url, String> {
@@ -225,6 +229,7 @@ fn beta_manifest_url() -> Result<tauri::Url, String> {
     url.parse().map_err(|e| format!("{url}: {e}"))
 }
 
+#[cfg(desktop)]
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct UpdateMetadata {
@@ -238,6 +243,7 @@ struct UpdateMetadata {
 
 /// The updater plugin's `check` with a beta channel added (its JS `check()` can't change the
 /// endpoint). Returns what the JS `Update` class takes, so download/install stay the plugin's.
+#[cfg(desktop)]
 #[tauri::command]
 async fn check_update(webview: tauri::Webview, beta: bool) -> Result<Option<UpdateMetadata>, String> {
     let mut builder = webview.updater_builder();
@@ -269,10 +275,10 @@ fn save_with_dialog(
     ext: &str,
     contents: &[u8],
 ) -> Result<Option<String>, String> {
-    let Some(path) = window
-        .dialog()
-        .file()
-        .set_parent(window)
+    let dialog = window.dialog().file();
+    #[cfg(desktop)]
+    let dialog = dialog.set_parent(window);
+    let Some(path) = dialog
         .set_file_name(name)
         .add_filter(ext.to_uppercase(), &[ext])
         .blocking_save_file() // async command: off the main thread, like the plugin's own save
@@ -325,11 +331,15 @@ fn request_location(app: tauri::AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
+    let builder = tauri::Builder::default();
+    #[cfg(desktop)]
+    let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_process::init());
+    builder
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let data_dir = app
@@ -358,6 +368,7 @@ pub fn run() {
             save_bytes,
             autosave_read,
             request_location,
+            #[cfg(desktop)]
             check_update
         ])
         .run(tauri::generate_context!())
