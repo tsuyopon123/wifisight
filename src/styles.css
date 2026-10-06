@@ -1385,6 +1385,8 @@ button.icon-label svg {
     display: none;
   }
   #bss-table tr {
+    content-visibility: auto; /* off-screen cards skip style / layout on each redraw */
+    contain-intrinsic-size: auto 110px;
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;

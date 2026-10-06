@@ -82,7 +82,17 @@ function ingest(s: Snapshot) {
   survey.onSnapshot(s);
 }
 
+// A full redraw costs ~80 ms on a phone; landing mid-scroll it stutters the list, so it waits for the scroll to settle.
+let scrolledAt = 0;
+let deferred = 0;
+
 function render() {
+  const since = performance.now() - scrolledAt;
+  if (since < 400) {
+    window.clearTimeout(deferred);
+    deferred = window.setTimeout(render, 400 - since);
+    return;
+  }
   survey.render();
   // phones: flag a narrowed list while the controls are tucked behind ☰
   $("btn-more").classList.toggle("filtered", !!state.filter.trim() || state.bands.size < 3 || !state.showHidden || state.onlyCurrent);
@@ -196,6 +206,7 @@ function setOn(b: Element, on: boolean) {
 }
 
 function renderChart() {
+  if (!$("chart").clientWidth) return; // hidden: phones show it only in the Channels view
   chart.draw(state.tab, visibleTracks(), state.table.selected, Date.now(), state.historyMs, state.latestScan);
   $("history-field").style.visibility = state.tab === "signal" ? "visible" : "hidden";
 }
@@ -251,6 +262,7 @@ function setRunning(on: boolean) {
 
 function bind() {
   $("btn-run").onclick = () => setRunning(!state.running);
+  $("table-wrap").addEventListener("scroll", () => (scrolledAt = performance.now()), { passive: true });
   $<HTMLSelectElement>("sel-interval").onchange = (e) => {
     state.intervalMs = Number((e.target as HTMLSelectElement).value);
     survey.render(); // time per point depends on it
