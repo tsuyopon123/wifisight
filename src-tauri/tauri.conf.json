@@ -48,6 +48,9 @@
         "depends": ["libcap2-bin"],
         "postInstallScript": "deb/postinst"
       }
+    },
+    "android": {
+      "minSdkVersion": 30
     }
   },
   "plugins": {
