@@ -6,7 +6,6 @@ import android.content.Context
 import android.location.LocationManager
 import android.net.wifi.ScanResult
 import android.net.wifi.WifiManager
-import android.os.Build
 import android.os.SystemClock
 import app.tauri.PermissionState
 import app.tauri.annotation.Command
@@ -24,15 +23,14 @@ import org.json.JSONArray
  */
 @TauriPlugin(
     permissions = [
-        Permission(strings = [Manifest.permission.ACCESS_FINE_LOCATION], alias = "location"),
-        Permission(strings = [Manifest.permission.NEARBY_WIFI_DEVICES], alias = "nearby"),
+        // scans need precise location on every version; NEARBY_WIFI_DEVICES alone gets empty results
+        Permission(strings = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION], alias = "location"),
     ]
 )
 class WifiScanPlugin(private val activity: Activity) : Plugin(activity) {
     private val wifi get() = activity.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
 
-    // API 33+ scans with NEARBY_WIFI_DEVICES (neverForLocation); older needs fine location.
-    private val alias get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) "nearby" else "location"
+    private val alias = "location"
 
     /** Same vocabulary as the macOS backend: authorized / denied / notDetermined. */
     private fun status() = when (getPermissionState(alias)) {
@@ -58,7 +56,7 @@ class WifiScanPlugin(private val activity: Activity) : Plugin(activity) {
     @Command
     fun scan(invoke: Invoke) {
         if (status() != "authorized") {
-            invoke.reject("permission denied: Wi-Fi scanning needs the nearby devices / location permission")
+            invoke.reject("permission denied: Wi-Fi scanning needs precise location access")
             return
         }
         val warnings = JSONArray()
