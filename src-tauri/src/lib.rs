@@ -14,9 +14,16 @@ const OUI_URL: &str = "https://standards-oui.ieee.org/oui/oui.csv";
 #[cfg(desktop)]
 const RELEASES_API: &str = "https://api.github.com/repos/tsuyopon123/wifisight/releases?per_page=20";
 
+/// Managed on the builder, not in setup(): on Android the page can call commands before setup() runs.
+#[derive(Default)]
 struct AppState {
     oui: Arc<Mutex<Option<OuiDb>>>,
-    data_dir: PathBuf,
+}
+
+fn data_dir(app: &tauri::AppHandle) -> PathBuf {
+    app.path()
+        .app_data_dir()
+        .unwrap_or_else(|_| std::env::temp_dir().join("wifisight"))
 }
 
 #[derive(Serialize)]
@@ -183,8 +190,8 @@ async fn scan(
 
 /// Download the IEEE OUI registry into the app data dir and load it.
 #[tauri::command]
-async fn update_oui_db(state: State<'_, AppState>) -> Result<usize, String> {
-    let path = state.data_dir.join("oui.csv");
+async fn update_oui_db(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<usize, String> {
+    let path = data_dir(&app).join("oui.csv");
     let oui = state.oui.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let text = ureq::get(OUI_URL)
@@ -346,17 +353,18 @@ async fn save_bytes(
 
 /// Survey autosave in the app data dir, so a long walk survives a crash / reload.
 #[tauri::command]
-fn autosave_write(state: State<'_, AppState>, contents: String) -> Result<(), String> {
-    let _ = std::fs::create_dir_all(&state.data_dir);
-    let path = state.data_dir.join("survey-autosave.json");
+fn autosave_write(app: tauri::AppHandle, contents: String) -> Result<(), String> {
+    let dir = data_dir(&app);
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("survey-autosave.json");
     let tmp = path.with_extension("tmp");
     std::fs::write(&tmp, contents).map_err(|e| e.to_string())?;
     std::fs::rename(tmp, path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn autosave_read(state: State<'_, AppState>) -> Option<String> {
-    std::fs::read_to_string(state.data_dir.join("survey-autosave.json")).ok()
+fn autosave_read(app: tauri::AppHandle) -> Option<String> {
+    std::fs::read_to_string(data_dir(&app).join("survey-autosave.json")).ok()
 }
 
 #[tauri::command]
@@ -458,18 +466,12 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .manage(AppState::default())
         .setup(|app| {
-            let data_dir = app
-                .path()
-                .app_data_dir()
-                .unwrap_or_else(|_| std::env::temp_dir().join("wifisight"));
-            let oui = std::fs::read_to_string(data_dir.join("oui.csv"))
+            let oui = std::fs::read_to_string(data_dir(app.handle()).join("oui.csv"))
                 .ok()
                 .map(|t| OuiDb::from_ieee_csv(&t));
-            app.manage(AppState {
-                oui: Arc::new(Mutex::new(oui)),
-                data_dir,
-            });
+            *app.state::<AppState>().oui.lock().unwrap() = oui;
             // macOS: SSID/BSSID are redacted without Location Services. setup() runs on the main thread.
             wifi_scan::request_location_permission();
             Ok(())
