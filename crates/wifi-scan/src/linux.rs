@@ -1,7 +1,7 @@
 //! Linux backend: nl80211 over generic netlink, implemented directly on libc
 //! sockets (no external netlink crate).
 
-use crate::{Interface, ScanError, ScanOptions, ScanOutput};
+use crate::{Interface, LinkInfo, ScanError, ScanOptions, ScanOutput};
 use std::collections::HashMap;
 use std::io;
 use std::time::{Duration, Instant};
@@ -26,6 +26,7 @@ const NETLINK_ADD_MEMBERSHIP: i32 = 1;
 
 // nl80211
 const NL80211_CMD_GET_INTERFACE: u8 = 5;
+const NL80211_CMD_GET_STATION: u8 = 17;
 const NL80211_CMD_GET_SCAN: u8 = 32;
 const NL80211_CMD_TRIGGER_SCAN: u8 = 33;
 const NL80211_CMD_NEW_SCAN_RESULTS: u8 = 34;
@@ -35,6 +36,7 @@ const NL80211_ATTR_IFINDEX: u16 = 3;
 const NL80211_ATTR_IFNAME: u16 = 4;
 const NL80211_ATTR_IFTYPE: u16 = 5;
 const NL80211_ATTR_MAC: u16 = 6;
+const NL80211_ATTR_STA_INFO: u16 = 21;
 const NL80211_ATTR_BSS: u16 = 47;
 const NL80211_ATTR_SURVEY_INFO: u16 = 84;
 const NL80211_IFTYPE_STATION: u32 = 2;
@@ -48,6 +50,18 @@ const NL80211_BSS_SIGNAL_UNSPEC: u16 = 8;
 const NL80211_BSS_STATUS: u16 = 9;
 const NL80211_BSS_SEEN_MS_AGO: u16 = 10;
 const NL80211_BSS_BEACON_IES: u16 = 11;
+const NL80211_STA_INFO_SIGNAL: u16 = 7;
+const NL80211_STA_INFO_TX_BITRATE: u16 = 8;
+const NL80211_STA_INFO_RX_BITRATE: u16 = 14;
+const NL80211_RATE_INFO_BITRATE: u16 = 1;
+const NL80211_RATE_INFO_MCS: u16 = 2;
+const NL80211_RATE_INFO_BITRATE32: u16 = 5;
+const NL80211_RATE_INFO_VHT_MCS: u16 = 6;
+const NL80211_RATE_INFO_VHT_NSS: u16 = 7;
+const NL80211_RATE_INFO_HE_MCS: u16 = 13;
+const NL80211_RATE_INFO_HE_NSS: u16 = 14;
+const NL80211_RATE_INFO_EHT_MCS: u16 = 19;
+const NL80211_RATE_INFO_EHT_NSS: u16 = 20;
 const NL80211_SURVEY_INFO_FREQUENCY: u16 = 1;
 const NL80211_SURVEY_INFO_NOISE: u16 = 2;
 
@@ -409,6 +423,69 @@ impl Nl80211 {
     }
 }
 
+impl Nl80211 {
+    /// The AP we're associated with (a station interface has exactly one station entry).
+    fn station(&mut self, ifindex: u32) -> Result<Option<LinkInfo>, ScanError> {
+        let replies = self
+            .sock
+            .request(
+                self.family,
+                NL80211_CMD_GET_STATION,
+                true,
+                &Self::ifindex_attr(ifindex),
+            )
+            .map_err(|e| ScanError::Os(format!("GET_STATION: {e}")))?;
+        Ok(replies.iter().find_map(|(_, p)| {
+            let a = attrs(p);
+            let mac = get(&a, NL80211_ATTR_MAC).filter(|m| m.len() >= 6)?;
+            let info = attrs(get(&a, NL80211_ATTR_STA_INFO)?);
+            let (tx_mbps, mcs, nss) = get(&info, NL80211_STA_INFO_TX_BITRATE)
+                .map(parse_rate)
+                .unwrap_or_default();
+            let (rx_mbps, ..) = get(&info, NL80211_STA_INFO_RX_BITRATE)
+                .map(parse_rate)
+                .unwrap_or_default();
+            Some(LinkInfo {
+                bssid: wifi_core::fmt_mac(&[mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]]),
+                ssid: None,
+                rssi_dbm: get(&info, NL80211_STA_INFO_SIGNAL)
+                    .and_then(|d| d.first())
+                    .map(|&b| b as i8 as i32)
+                    .filter(|&r| r < 0),
+                tx_mbps,
+                rx_mbps,
+                mcs,
+                nss,
+            })
+        }))
+    }
+}
+
+/// Nested NL80211_RATE_INFO_* → (Mbps, MCS, NSS). HT MCS 0–31 folds the stream count into the index.
+fn parse_rate(d: &[u8]) -> (Option<f64>, Option<u8>, Option<u8>) {
+    let a = attrs(d);
+    let u8_at = |t| get(&a, t).and_then(|d| d.first()).copied();
+    let rate = get(&a, NL80211_RATE_INFO_BITRATE32)
+        .and_then(u32_of)
+        .or_else(|| {
+            get(&a, NL80211_RATE_INFO_BITRATE)
+                .and_then(u16_of)
+                .map(u32::from)
+        })
+        .filter(|&r| r > 0)
+        .map(|r| r as f64 / 10.0);
+    let (mcs, nss) = [
+        (NL80211_RATE_INFO_EHT_MCS, NL80211_RATE_INFO_EHT_NSS),
+        (NL80211_RATE_INFO_HE_MCS, NL80211_RATE_INFO_HE_NSS),
+        (NL80211_RATE_INFO_VHT_MCS, NL80211_RATE_INFO_VHT_NSS),
+    ]
+    .into_iter()
+    .find_map(|(m, n)| Some((Some(u8_at(m)?), u8_at(n))))
+    .or_else(|| u8_at(NL80211_RATE_INFO_MCS).map(|m| (Some(m % 8), Some(m / 8 + 1))))
+    .unwrap_or_default();
+    (rate, mcs, nss)
+}
+
 /// Wait for NEW_SCAN_RESULTS / SCAN_ABORTED for `ifindex` on the scan multicast group.
 fn wait_scan_done(ev: &Sock, ifindex: u32, timeout: Duration) -> bool {
     let start = Instant::now();
@@ -459,19 +536,30 @@ pub fn interfaces() -> Result<Vec<Interface>, ScanError> {
         .collect())
 }
 
-pub fn scan(opts: &ScanOptions) -> Result<ScanOutput, ScanError> {
-    let mut nl = Nl80211::open()?;
+/// Interface by name; the first station interface when `name` is `None`.
+fn pick(nl: &mut Nl80211, name: Option<&str>) -> Result<IfaceInfo, ScanError> {
     let ifs = nl.interfaces()?;
-    let chosen = match &opts.interface {
-        Some(name) => ifs.iter().find(|i| &i.1 == name),
+    match name {
+        Some(name) => ifs.iter().find(|i| i.1 == name),
         None => ifs
             .iter()
             .find(|i| i.2 == NL80211_IFTYPE_STATION)
             .or(ifs.first()),
     }
     .cloned()
-    .ok_or(ScanError::NoInterface)?;
-    let (ifindex, ifname, _, _) = chosen;
+    .ok_or(ScanError::NoInterface)
+}
+
+pub fn link(interface: Option<&str>) -> Result<Option<LinkInfo>, ScanError> {
+    let mut nl = Nl80211::open()?;
+    let (ifindex, _, _, _) = pick(&mut nl, interface)?;
+    // ssid stays None: it is only in the BSS table, too heavy to dump every second
+    nl.station(ifindex)
+}
+
+pub fn scan(opts: &ScanOptions) -> Result<ScanOutput, ScanError> {
+    let mut nl = Nl80211::open()?;
+    let (ifindex, ifname, _, _) = pick(&mut nl, opts.interface.as_deref())?;
     let mut warnings = Vec::new();
 
     if opts.trigger {
@@ -536,5 +624,23 @@ mod tests {
         assert_eq!(a.len(), 2);
         assert_eq!(u32_of(get(&a, 3).unwrap()), Some(7));
         assert_eq!(get(&a, 4).unwrap(), b"wlan0\0");
+    }
+
+    #[test]
+    fn rate_info() {
+        let mut he = Vec::new();
+        put_attr(
+            &mut he,
+            NL80211_RATE_INFO_BITRATE32,
+            &12010u32.to_ne_bytes(),
+        );
+        put_attr(&mut he, NL80211_RATE_INFO_HE_MCS, &[11]);
+        put_attr(&mut he, NL80211_RATE_INFO_HE_NSS, &[2]);
+        assert_eq!(parse_rate(&he), (Some(1201.0), Some(11), Some(2)));
+        let mut ht = Vec::new();
+        put_attr(&mut ht, NL80211_RATE_INFO_BITRATE, &1300u16.to_ne_bytes());
+        put_attr(&mut ht, NL80211_RATE_INFO_MCS, &[15]);
+        assert_eq!(parse_rate(&ht), (Some(130.0), Some(7), Some(2)));
+        assert_eq!(parse_rate(&[]), (None, None, None));
     }
 }

@@ -7,8 +7,10 @@
 
 #![allow(deprecated)]
 
-use crate::{Interface, ScanError, ScanOptions, ScanOutput};
+use crate::{Interface, LinkInfo, ScanError, ScanOptions, ScanOutput};
 use objc2::rc::Retained;
+use objc2::runtime::NSObjectProtocol;
+use objc2::{msg_send, sel};
 use objc2_core_location::CLLocationManager;
 use objc2_core_wlan::{CWChannelBand, CWChannelWidth, CWInterface, CWNetwork, CWWiFiClient};
 use objc2_foundation::NSString;
@@ -166,5 +168,34 @@ pub fn scan(opts: &ScanOptions) -> Result<ScanOutput, ScanError> {
             bss,
             warnings,
         })
+    }
+}
+
+pub fn link(interface: Option<&str>) -> Result<Option<LinkInfo>, ScanError> {
+    let iface = pick_interface(interface)?;
+    unsafe {
+        // BSSID is nil when not associated, and also without Location Services.
+        let Some(bssid) = ns(iface.bssid()).as_deref().and_then(wifi_core::parse_mac) else {
+            return Ok(None);
+        };
+        // ponytail: private CWInterface selectors (present on macOS 14–27). If Apple drops them,
+        // respondsToSelector fails and MCS/NSS just become None. No RX rate selector exists.
+        let private = |s| iface.respondsToSelector(s);
+        let mcs = private(sel!(mcsIndex)).then(|| msg_send![&*iface, mcsIndex]);
+        let nss = private(sel!(numberOfSpatialStreams))
+            .then(|| msg_send![&*iface, numberOfSpatialStreams]);
+        let rate = iface.transmitRate();
+        let rssi = iface.rssiValue() as i32;
+        Ok(Some(LinkInfo {
+            bssid: wifi_core::fmt_mac(&bssid),
+            ssid: ns(iface.ssid()),
+            rssi_dbm: (rssi < 0).then_some(rssi),
+            tx_mbps: (rate > 0.0).then_some(rate),
+            rx_mbps: None,
+            mcs: mcs.and_then(|v: u64| u8::try_from(v).ok()),
+            nss: nss
+                .and_then(|v: u64| u8::try_from(v).ok())
+                .filter(|&n| n > 0),
+        }))
     }
 }
