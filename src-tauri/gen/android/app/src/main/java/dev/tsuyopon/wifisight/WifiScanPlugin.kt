@@ -60,9 +60,10 @@ class WifiScanPlugin(private val activity: Activity) : Plugin(activity) {
             return
         }
         val warnings = JSONArray()
-        // startScan() doesn't wait: getScanResults() below returns the previous scan.
+        // startScan() doesn't wait: getScanResults() below returns the previous scan. Every call counts
+        // against the throttle (4 / 2 min), so the Rust side re-reads with trigger=false while it waits.
         @Suppress("DEPRECATION")
-        if (!wifi.startScan()) {
+        if (invoke.getArgs().optBoolean("trigger", true) && !wifi.startScan()) {
             warnings.put("scan throttled (Android allows 4 scans / 2 min): turn off Developer options › Wi-Fi scan throttling")
         }
         val results = try {
@@ -83,6 +84,7 @@ class WifiScanPlugin(private val activity: Activity) : Plugin(activity) {
         invoke.resolve(JSObject().apply {
             put("bss", bss)
             put("warnings", warnings)
+            put("newestUs", results.maxOfOrNull { it.timestamp } ?: 0L) // changes when a scan lands
         })
     }
 

@@ -380,7 +380,9 @@ async fn request_location(app: tauri::AppHandle) -> Result<(), String> {
 /// `RawBss` like the desktop backends in wifi-scan.
 #[cfg(target_os = "android")]
 mod android {
-    use serde::Deserialize;
+    use serde::{Deserialize, Serialize};
+    use std::sync::atomic::{AtomicI64, Ordering};
+    use std::time::{Duration, Instant};
     use tauri::plugin::{Builder, PluginHandle, TauriPlugin};
     use tauri::{AppHandle, Manager, Wry};
     use wifi_scan::{Interface, ScanOutput};
@@ -407,22 +409,48 @@ mod android {
         }
     }
 
-    /// Blocks until the plugin answers: never call on the UI thread.
+    /// Newest result timestamp handed out so far (µs since boot).
+    static LAST_SCAN: AtomicI64 = AtomicI64::new(0);
+
+    /// Triggers a scan and waits for its results. Android keeps returning the previous list until
+    /// its own scan lands (a few seconds), so returning at once would hand the UI the same list
+    /// every 300 ms (redrawing it for nothing) and count one scan as many survey samples.
+    /// Blocks: never call on the UI thread.
     pub fn scan(app: &AppHandle) -> Result<ScanOutput, String> {
         #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
         struct Out {
             bss: Vec<wifi_core::RawBss>,
             warnings: Vec<String>,
+            newest_us: i64,
         }
-        let o: Out = app
-            .state::<Scanner>()
-            .0
-            .run_mobile_plugin("scan", ())
-            .map_err(|e| e.to_string())?;
+        #[derive(Serialize)]
+        struct Args {
+            trigger: bool,
+        }
+        let plugin = &app.state::<Scanner>().0;
+        let call = |trigger| {
+            plugin
+                .run_mobile_plugin::<Out>("scan", Args { trigger })
+                .map_err(|e| e.to_string())
+        };
+        let start = Instant::now();
+        // the trigger call's warnings (throttled, location off) are the ones that matter
+        let Out { mut bss, mut warnings, mut newest_us } = call(true)?;
+        // ponytail: fixed 10 s cap; a throttled radio returns its cached list after it, with a warning
+        while !bss.is_empty() && newest_us <= LAST_SCAN.load(Ordering::Relaxed) {
+            if start.elapsed() > Duration::from_secs(10) {
+                warnings.push("no new scan results in 10 s: showing the previous ones".into());
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(500));
+            Out { bss, newest_us, .. } = call(false)?;
+        }
+        LAST_SCAN.fetch_max(newest_us, Ordering::Relaxed);
         Ok(ScanOutput {
             interface: "wlan0".into(),
-            bss: o.bss,
-            warnings: o.warnings,
+            bss,
+            warnings,
         })
     }
 
