@@ -1278,3 +1278,51 @@ button.icon-label svg {
 #dlg-help code {
   font: 12px var(--mono);
 }
+
+/* ── phones: one column. Details covers the scanner (it has its own × and Export JSON); the survey side panel goes under the plan ── */
+@media (max-width: 720px) {
+  .toolbar {
+    flex-wrap: wrap;
+    padding: 6px 8px;
+  }
+  /* Export / Settings / Help on the first row, the scan controls wrapping below */
+  .tb-end {
+    margin-left: auto;
+  }
+  .tb-main {
+    order: 1;
+    flex-basis: 100%;
+    gap: 6px 10px;
+  }
+  #filter {
+    flex-basis: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+  #main {
+    position: relative;
+  }
+  #main:has(> #details:not([hidden])) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #details {
+    position: absolute;
+    grid-area: auto; /* else column 2 (zero wide here) is its containing block */
+    inset: 0;
+    z-index: calc(var(--z-sticky) + 1); /* over the table's sticky header */
+    border-left: 0;
+  }
+  #survey {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 45%);
+  }
+  #sv-splitter {
+    display: none;
+  }
+  #sv-side {
+    border-top: 1px solid var(--line);
+  }
+  .statusbar {
+    gap: 10px;
+  }
+}

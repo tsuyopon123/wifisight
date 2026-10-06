@@ -1140,10 +1140,31 @@ export async function init(h: SurveyHost) {
     click: boolean;
     from: { x: number; y: number } | null;
   } | null = null;
+  // touch: a second finger turns the drag into pinch-zoom, panning with the fingers' midpoint
+  const touches = new Map<number, { x: number; y: number }>();
+  let pinch: { d: number; mx: number; my: number } | null = null;
+  const pinchNow = () => {
+    const [a, b] = [...touches.values()];
+    return { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+  };
+  const touchEnd = (e: PointerEvent) => {
+    touches.delete(e.pointerId);
+    if (!pinch) return false;
+    if (touches.size < 2) pinch = null; // the finger left behind doesn't pan or click
+    return true;
+  };
   cv.onpointerdown = (e) => {
     if ((e.button !== 0 && e.button !== 1) || !project) return;
     e.preventDefault(); // middle button: no autoscroll
     cv.setPointerCapture(e.pointerId);
+    if (e.pointerType === "touch") {
+      touches.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+      if (touches.size > 1) {
+        drag = null;
+        if (touches.size === 2) pinch = pinchNow();
+        return;
+      }
+    }
     const panOnly = hand || e.button === 1;
     const hh = calib || panOnly ? null : hit(e.offsetX, e.offsetY);
     const kind = hh?.point ? "point" : hh?.marker ? "ap" : "pan";
@@ -1156,6 +1177,7 @@ export async function init(h: SurveyHost) {
   };
   cv.onauxclick = (e) => e.preventDefault();
   cv.onpointerup = (e) => {
+    if (touchEnd(e)) return;
     const d = drag;
     drag = null;
     if (!d) return;
@@ -1178,7 +1200,10 @@ export async function init(h: SurveyHost) {
       render();
     }
   };
-  cv.onpointercancel = () => (drag = null);
+  cv.onpointercancel = (e) => {
+    touchEnd(e);
+    drag = null;
+  };
   cv.onwheel = (e) => {
     if (!project) return;
     e.preventDefault();
@@ -1190,6 +1215,15 @@ export async function init(h: SurveyHost) {
   };
 
   cv.onpointermove = (e) => {
+    if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+    if (pinch && touches.size === 2) {
+      const p = pinchNow();
+      zoomAt(p.d / pinch.d, p.mx, p.my); // first: it works from the current pan
+      pan = { x: pan.x + p.mx - pinch.mx, y: pan.y + p.my - pinch.my };
+      pinch = p;
+      draw();
+      return;
+    }
     if (drag && project) {
       if (!drag.moved && Math.hypot(e.offsetX - drag.x, e.offsetY - drag.y) < 4) return;
       drag.moved = true;
