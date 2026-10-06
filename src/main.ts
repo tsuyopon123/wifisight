@@ -1,5 +1,5 @@
 import * as api from "./api";
-import { ChartView, type Tab } from "./charts";
+import { ChartView, PAD, type Tab } from "./charts";
 import * as survey from "./survey";
 import { detailsText, renderDetails } from "./details";
 import { COLUMNS, layout, moveCol, renderBody, renderHead, resetLayout, saveLayout, sortTracks, toCsv, toggleCol, type TableState } from "./table";
@@ -208,6 +208,14 @@ function setOn(b: Element, on: boolean) {
 function renderChart() {
   if (!$("chart").clientWidth) return; // hidden: phones show it only in the Channels view
   chart.draw(state.tab, visibleTracks(), state.table.selected, Date.now(), state.historyMs, state.latestScan);
+  // phones scroll the wide 5 / 6 GHz charts sideways: a copy of the dBm axis stays pinned at the left
+  const axis = $<HTMLCanvasElement>("chart-axis");
+  if (axis.clientWidth) {
+    const src = $<HTMLCanvasElement>("chart");
+    axis.width = Math.round((PAD.l * src.width) / src.clientWidth);
+    axis.height = src.height;
+    axis.getContext("2d")!.drawImage(src, 0, 0, axis.width, axis.height, 0, 0, axis.width, axis.height);
+  }
   $("history-field").style.visibility = state.tab === "signal" ? "visible" : "hidden";
 }
 
@@ -262,7 +270,8 @@ function setRunning(on: boolean) {
 
 function bind() {
   $("btn-run").onclick = () => setRunning(!state.running);
-  $("table-wrap").addEventListener("scroll", () => (scrolledAt = performance.now()), { passive: true });
+  for (const el of [$("table-wrap"), $("chart").parentElement!])
+    el.addEventListener("scroll", () => (scrolledAt = performance.now()), { passive: true });
   $<HTMLSelectElement>("sel-interval").onchange = (e) => {
     state.intervalMs = Number((e.target as HTMLSelectElement).value);
     survey.render(); // time per point depends on it
@@ -430,6 +439,7 @@ function bind() {
     const b = (e.target as HTMLElement).closest<HTMLElement>("button[data-tab]");
     if (!b) return;
     state.tab = b.dataset.tab as Tab;
+    $("chart-pane").dataset.tab = state.tab; // phones: the 5 / 6 GHz charts are wider than the screen
     document.querySelectorAll("#tabs button[data-tab]").forEach((x) => setOn(x, x === b));
     renderChart();
   };

@@ -345,6 +345,9 @@ input[type="search"] {
   position: relative;
   min-height: 0;
 }
+#chart-axis {
+  display: none; /* phones: pinned dBm axis over the sideways-scrolling 5 / 6 GHz charts */
+}
 #chart {
   position: absolute;
   inset: 0;
@@ -1371,6 +1374,27 @@ button.icon-label svg {
   }
   body.mode-channels #bottom {
     display: grid !important;
+  }
+  /* 5 / 6 GHz don't fit a phone's width: draw them wider and scroll sideways (~37 px per 20 MHz) */
+  body.mode-channels .canvas-wrap {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  #chart-pane[data-tab="5"] #chart {
+    width: 1400px;
+  }
+  #chart-pane[data-tab="6"] #chart {
+    width: 2200px;
+  }
+  #chart-pane:is([data-tab="5"], [data-tab="6"]) #chart-axis {
+    display: block;
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    width: 44px; /* PAD.l in charts.ts */
+    height: 100%;
+    background: var(--bg);
+    pointer-events: none;
   }
   .tabs button {
     padding: 10px 14px;

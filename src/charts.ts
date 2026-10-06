@@ -20,7 +20,7 @@ interface Ctx {
   accent: string;
 }
 
-const PAD = { l: 44, r: 14, t: 12, b: 26 };
+export const PAD = { l: 44, r: 14, t: 12, b: 26 };
 const RSSI_MIN = -100;
 const RSSI_MAX = -20;
 

@@ -70,7 +70,7 @@
       <div class="menu-pop" id="col-pop" hidden></div>
       <div id="splitter" title="Drag to resize"></div>
       <section id="bottom">
-        <div id="chart-pane">
+        <div id="chart-pane" data-tab="signal">
           <nav class="tabs" id="tabs">
             <button data-tab="signal" class="on" aria-pressed="true">Signal</button>
             <button data-tab="2.4" aria-pressed="false">2.4 GHz</button>
@@ -87,7 +87,7 @@
               </select>
             </label>
           </nav>
-          <div class="canvas-wrap"><canvas id="chart"></canvas><div id="tooltip" hidden></div></div>
+          <div class="canvas-wrap"><canvas id="chart-axis" aria-hidden="true"></canvas><canvas id="chart"></canvas><div id="tooltip" hidden></div></div>
         </div>
       </section>
       <aside id="details" hidden></aside>
