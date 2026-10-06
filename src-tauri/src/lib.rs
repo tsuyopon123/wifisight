@@ -301,9 +301,27 @@ fn save_with_dialog(
     else {
         return Ok(None);
     };
-    let path = path.into_path().map_err(|e| e.to_string())?;
-    std::fs::write(&path, contents).map_err(|e| e.to_string())?;
-    Ok(Some(path.display().to_string()))
+    // Android hands back a content:// URI, which only the fs plugin can open
+    #[cfg(target_os = "android")]
+    {
+        use std::io::Write;
+        use tauri_plugin_fs::{FsExt, OpenOptions};
+        let mut opts = OpenOptions::new();
+        opts.write(true).truncate(true).create(true); // "wt": plain "w" may leave a longer old file's tail
+        let shown = path.to_string();
+        window
+            .fs()
+            .open(path, opts)
+            .and_then(|mut f| f.write_all(contents))
+            .map_err(|e| e.to_string())?;
+        Ok(Some(shown))
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let path = path.into_path().map_err(|e| e.to_string())?;
+        std::fs::write(&path, contents).map_err(|e| e.to_string())?;
+        Ok(Some(path.display().to_string()))
+    }
 }
 
 #[tauri::command]
@@ -434,7 +452,9 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init());
     #[cfg(target_os = "android")]
-    let builder = builder.plugin(android::init());
+    let builder = builder
+        .plugin(tauri_plugin_fs::init())
+        .plugin(android::init());
     builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
