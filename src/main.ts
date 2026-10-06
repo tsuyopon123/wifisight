@@ -117,6 +117,13 @@ function renderStatus() {
   if ($<HTMLDialogElement>("dlg-roams").open) renderRoams();
 }
 
+/** Forget the current link (and drop polls in flight): the next answer comes from another radio. */
+function resetLink() {
+  state.link = null;
+  linkGen++;
+  linkKnown = false;
+}
+
 /** Every second, independent of scanning: roaming tests run with scans paused (scans disturb roaming). */
 async function pollLink() {
   if (linkBusy || !api.isTauri) return;
@@ -323,6 +330,7 @@ function bind() {
       /* per-viewer convenience only */
     }
     state.iface = null;
+    resetLink(); // now, not after loadInterfaces: a poll in between would log local → probe as a roam
     loadInterfaces().then(clearSession);
   };
   $<HTMLSelectElement>("sel-iface").onchange = (e) => {
@@ -711,9 +719,7 @@ function clearSession() {
   state.table.selected = null;
   state.lastInterface = "";
   state.connLabel = "";
-  state.link = null;
-  linkGen++;
-  linkKnown = false;
+  resetLink();
   state.lastError = "";
   $("st-warn").textContent = "";
   dropScans();
