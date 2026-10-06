@@ -7,7 +7,7 @@ use tauri_plugin_dialog::DialogExt;
 #[cfg(desktop)]
 use tauri_plugin_updater::UpdaterExt;
 use wifi_core::{analyze, BssInfo, OuiDb};
-use wifi_scan::{Interface, ScanOptions};
+use wifi_scan::Interface;
 
 const OUI_URL: &str = "https://standards-oui.ieee.org/oui/oui.csv";
 /// Published releases, newest first, pre-releases included (drafts are hidden without auth).
@@ -47,14 +47,22 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+// async: on Android the location status comes from the Kotlin plugin, which runs on the UI thread
 #[tauri::command]
-fn platform_info(app: tauri::AppHandle, state: State<'_, AppState>) -> PlatformInfo {
-    PlatformInfo {
+async fn platform_info(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<PlatformInfo, String> {
+    #[cfg(target_os = "android")]
+    let location_status = Some(android::permission_status(&app).await?);
+    #[cfg(not(target_os = "android"))]
+    let location_status = wifi_scan::location_permission_status();
+    Ok(PlatformInfo {
         os: std::env::consts::OS,
         arch: std::env::consts::ARCH,
         // tauri.conf version: CI sets it from the tag (e.g. 0.1.0-beta.3); Cargo stays 0.1.0
         version: app.package_info().version.to_string(),
-        location_status: wifi_scan::location_permission_status(),
+        location_status,
         oui_entries: state
             .oui
             .lock()
@@ -66,7 +74,7 @@ fn platform_info(app: tauri::AppHandle, state: State<'_, AppState>) -> PlatformI
             && (!cfg!(windows)
                 || std::env::current_exe()
                     .is_ok_and(|p| p.with_file_name("uninstall.exe").exists())),
-    }
+    })
 }
 
 /// GET JSON from an external probe (`wifisight-cli serve`). `probe` is "host:port" or a URL.
@@ -111,6 +119,9 @@ async fn probe_info(probe: String) -> Result<serde_json::Value, String> {
 async fn list_interfaces(probe: Option<String>) -> Result<Vec<Interface>, String> {
     tauri::async_runtime::spawn_blocking(move || match probe.filter(|p| !p.trim().is_empty()) {
         Some(p) => probe_get(&p, "/interfaces"),
+        #[cfg(target_os = "android")]
+        None => Ok(vec![android::interface()]),
+        #[cfg(not(target_os = "android"))]
         None => wifi_scan::interfaces().map_err(|e| e.to_string()),
     })
     .await
@@ -119,6 +130,7 @@ async fn list_interfaces(probe: Option<String>) -> Result<Vec<Interface>, String
 
 #[tauri::command]
 async fn scan(
+    #[allow(unused_variables)] app: tauri::AppHandle,
     state: State<'_, AppState>,
     iface: Option<String>,
     probe: Option<String>,
@@ -144,7 +156,11 @@ async fn scan(
             let o: wifi_scan::ScanOutput = probe_get(&p, &format!("/scan{q}"))?;
             (format!("probe:{}", o.interface), o.bss, o.warnings)
         } else {
-            let o = wifi_scan::scan(&ScanOptions {
+            // blocking pool, not the UI thread, so waiting on the Kotlin plugin is fine
+            #[cfg(target_os = "android")]
+            let o = android::scan(&app)?;
+            #[cfg(not(target_os = "android"))]
+            let o = wifi_scan::scan(&wifi_scan::ScanOptions {
                 interface: iface,
                 trigger: true,
                 wait: false,
@@ -326,9 +342,88 @@ fn autosave_read(state: State<'_, AppState>) -> Option<String> {
 }
 
 #[tauri::command]
-fn request_location(app: tauri::AppHandle) -> Result<(), String> {
+async fn request_location(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    return android::request_access(&app).await;
+    #[cfg(not(target_os = "android"))]
     app.run_on_main_thread(wifi_scan::request_location_permission)
         .map_err(|e| e.to_string())
+}
+
+/// Wi-Fi scanning through the Kotlin plugin in gen/android (WifiScanPlugin.kt), which returns
+/// `RawBss` like the desktop backends in wifi-scan.
+#[cfg(target_os = "android")]
+mod android {
+    use serde::Deserialize;
+    use tauri::plugin::{Builder, PluginHandle, TauriPlugin};
+    use tauri::{AppHandle, Manager, Wry};
+    use wifi_scan::{Interface, ScanOutput};
+
+    struct Scanner(PluginHandle<Wry>);
+
+    pub fn init() -> TauriPlugin<Wry> {
+        Builder::new("wifiscan")
+            .setup(|app, api| {
+                let h = api.register_android_plugin("dev.tsuyopon.wifisight", "WifiScanPlugin")?;
+                app.manage(Scanner(h));
+                Ok(())
+            })
+            .build()
+    }
+
+    /// Android exposes no interface choice to apps.
+    pub fn interface() -> Interface {
+        Interface {
+            id: "wlan0".into(),
+            name: "wlan0".into(),
+            description: "Wi-Fi".into(),
+            mac: None,
+        }
+    }
+
+    /// Blocks until the plugin answers: never call on the UI thread.
+    pub fn scan(app: &AppHandle) -> Result<ScanOutput, String> {
+        #[derive(Deserialize)]
+        struct Out {
+            bss: Vec<wifi_core::RawBss>,
+            warnings: Vec<String>,
+        }
+        let o: Out = app
+            .state::<Scanner>()
+            .0
+            .run_mobile_plugin("scan", ())
+            .map_err(|e| e.to_string())?;
+        Ok(ScanOutput {
+            interface: "wlan0".into(),
+            bss: o.bss,
+            warnings: o.warnings,
+        })
+    }
+
+    #[derive(Deserialize)]
+    struct Status {
+        status: String,
+    }
+
+    /// authorized / denied / notDetermined, like the macOS backend.
+    pub async fn permission_status(app: &AppHandle) -> Result<String, String> {
+        let s: Status = app
+            .state::<Scanner>()
+            .0
+            .run_mobile_plugin_async("permissionStatus", ())
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(s.status)
+    }
+
+    pub async fn request_access(app: &AppHandle) -> Result<(), String> {
+        app.state::<Scanner>()
+            .0
+            .run_mobile_plugin_async::<Status>("requestAccess", ())
+            .await
+            .map(drop)
+            .map_err(|e| e.to_string())
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -338,6 +433,8 @@ pub fn run() {
     let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init());
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(android::init());
     builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())

@@ -115,7 +115,7 @@ type Act = "settings" | "location" | undefined;
 
 const actions = (act: Act, attr: string) =>
   act === "location"
-    ? `<div class="acts"><button ${attr}="location" class="primary">Request location access</button><button ${attr}="settings">Settings…</button></div>`
+    ? `<div class="acts"><button ${attr}="location" class="primary">${state.os === "android" ? "Allow Wi-Fi scanning" : "Request location access"}</button><button ${attr}="settings">Settings…</button></div>`
     : act === "settings"
       ? `<div class="acts"><button ${attr}="settings" class="primary">Check probe / interface…</button></div>`
       : "";
@@ -134,6 +134,8 @@ function explain(err: string): { title: string; hint: string; act?: Act } {
   if (e.includes("permission")) {
     if (state.os === "macos")
       return { title: "Location access is off", hint: "macOS only lets apps scan Wi-Fi with Location Services on: System Settings › Privacy & Security › Location Services.", act: "location" };
+    if (state.os === "android")
+      return { title: "Wi-Fi scan permission is off", hint: "Android needs Nearby devices (Android 13+) or Location access to scan: allow it, or turn it on in Settings › Apps › WiFiSight › Permissions.", act: "location" };
     if (state.os === "windows")
       return { title: "Location access is off", hint: "Windows needs Settings › Privacy & security › Location › “Let desktop apps access your location” to scan Wi-Fi.", act: "settings" };
     return { title: "Scanning isn't permitted", hint: "Active scans need CAP_NET_ADMIN: sudo setcap cap_net_admin+ep <path to wifisight>, or run NetworkManager.", act: "settings" };
@@ -159,6 +161,10 @@ function renderNotice() {
   if (state.lastError && state.scanCount) {
     const x = explain(state.lastError);
     html = `<p><b>${esc(x.title)}.</b> ${esc(x.hint)} Showing the last good scan.</p>${actions(x.act, "data-notice")}`;
+  } else if (state.os === "android" && state.location === "denied") {
+    html = `<p><b>Wi-Fi scan permission is off.</b> Turn on Nearby devices (Android 13+) or Location in Settings › Apps › WiFiSight › Permissions.</p>`;
+  } else if (state.os === "android" && state.location === "notDetermined") {
+    html = `<p><b>Allow Wi-Fi scanning</b> — Android asks for Nearby devices (Android 13+) or Location access.</p>${actions("location", "data-notice")}`;
   } else if (state.location === "denied" || state.location === "restricted") {
     html = `<p><b>Location access is off</b> — macOS hides SSIDs and BSSIDs. Turn it on in System Settings › Privacy & Security › Location Services.</p>${actions("location", "data-notice")}`;
   } else if (state.location === "notDetermined") {
