@@ -17,7 +17,7 @@ glibc=$(readelf -V --wide "$bin" | grep -o 'GLIBC_[0-9.]*' | cut -d_ -f2 | sort 
 [ -n "$glibc" ] || { echo "no GLIBC_ version found in $bin" >&2; exit 1; }
 cat > "$root/DEBIAN/control" <<CONTROL
 Package: wifisight-probe
-Version: $ver
+Version: $(echo "$ver" | tr - '~')
 Architecture: $arch
 Maintainer: Tsuyoshi OHIRA
 Depends: libc6 (>= $glibc)

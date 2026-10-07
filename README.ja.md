@@ -68,7 +68,7 @@ macOS、Windows、Linux で動き、解析は共通の `wifi-core` が行うの�
 起動時に新しいリリースを確認し、あればステータスバーの版の隣に「vX available」と表示します。勝手に更新はしません。
 更新するには、設定 › Updates の「Check for updates」を押します。ダウンロードとインストールのあと、アプリを再起動します（Linux では `.deb` のインストールにパスワードを求められます）。
 起動時の確認が不要なら、同じ場所の「Check on launch」をオフにしてください。
-通常は正式版（`-release.N`）だけを対象にします。beta も受け取るなら、同じ場所の「Include beta releases」をオンにしてください。`-portable.exe` では更新せずに Releases ページを開きます。
+通常は正式版（`v0.1.1` のように後ろに何も付かない版）だけを対象にします。beta も受け取るなら、同じ場所の「Include beta releases」をオンにしてください。`-portable.exe` では更新せずに Releases ページを開きます。
 
 ### 権限
 

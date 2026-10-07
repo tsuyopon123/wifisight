@@ -79,7 +79,7 @@ The app is not code-signed, so you'll see a warning the first time.
 On launch, the app checks for a new release and, if there is one, shows "vX available" next to the version in the status bar. It never updates on its own.
 To update, press "Check for updates" in Settings › Updates. It downloads and installs the update, then restarts (Linux asks for your password to install the `.deb`).
 Turn off "Check on launch" there to skip the check on launch.
-Only stable releases (`-release.N`) are offered unless you turn on "Include beta releases" there. The `-portable.exe` opens the Releases page instead of updating.
+Only stable releases (plain versions such as `v0.1.1`) are offered unless you turn on "Include beta releases" there. The `-portable.exe` opens the Releases page instead of updating.
 
 ### Permissions
 
