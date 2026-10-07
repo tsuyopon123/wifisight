@@ -3,7 +3,7 @@
 //! Windows 11 24H2+ requires "Let desktop apps access your location" for the
 //! BSS list; otherwise WlanGetNetworkBssList fails with ERROR_ACCESS_DENIED.
 
-use crate::{Interface, ScanError, ScanOptions, ScanOutput};
+use crate::{Interface, LinkInfo, ScanError, ScanOptions, ScanOutput};
 use std::time::Duration;
 use wifi_core::RawBss;
 use windows::core::GUID;
@@ -76,7 +76,8 @@ pub fn interfaces() -> Result<Vec<Interface>, ScanError> {
         .collect())
 }
 
-fn connected_bssid(c: &Client, g: &GUID) -> Option<[u8; 6]> {
+/// Association of the interface; `None` when disconnected (ERROR_INVALID_STATE).
+fn current_connection(c: &Client, g: &GUID) -> Option<WLAN_ASSOCIATION_ATTRIBUTES> {
     let mut size = 0u32;
     let mut data: *mut core::ffi::c_void = std::ptr::null_mut();
     let r = unsafe {
@@ -93,24 +94,47 @@ fn connected_bssid(c: &Client, g: &GUID) -> Option<[u8; 6]> {
     if r != ERROR_SUCCESS || data.is_null() {
         return None;
     }
-    let bssid = unsafe {
-        let attrs = &*(data as *const WLAN_CONNECTION_ATTRIBUTES);
-        let b = attrs.wlanAssociationAttributes.dot11Bssid;
+    unsafe {
+        let a = (*(data as *const WLAN_CONNECTION_ATTRIBUTES)).wlanAssociationAttributes;
         WlanFreeMemory(data as *const _);
-        b
-    };
-    Some(bssid)
+        Some(a)
+    }
+}
+
+/// Interface by GUID string or description; the first one when `id` is `None`.
+fn pick(c: &Client, id: Option<&str>) -> Result<(GUID, String), ScanError> {
+    let ifs = list_ifaces(c)?;
+    match id {
+        Some(id) => ifs.into_iter().find(|(g, n)| guid_str(g) == id || n == id),
+        None => ifs.into_iter().next(),
+    }
+    .ok_or(ScanError::NoInterface)
+}
+
+pub fn link(interface: Option<&str>) -> Result<Option<LinkInfo>, ScanError> {
+    let c = open()?;
+    let (guid, _) = pick(&c, interface)?;
+    Ok(current_connection(&c, &guid)
+        // Win11 24H2+ zeroes the BSSID without location access: can't tell roams apart, so no link.
+        .filter(|a| a.dot11Bssid != [0; 6])
+        .map(|a| {
+            let len = (a.dot11Ssid.uSSIDLength as usize).min(32);
+            LinkInfo {
+                bssid: wifi_core::fmt_mac(&a.dot11Bssid),
+                ssid: Some(String::from_utf8_lossy(&a.dot11Ssid.ucSSID[..len]).into_owned()),
+                // wlanSignalQuality 0–100 maps linearly to -100…-50 dBm
+                rssi_dbm: Some(a.wlanSignalQuality as i32 / 2 - 100),
+                tx_mbps: Some(a.ulTxRate as f64 / 1000.0).filter(|&r| r > 0.0),
+                rx_mbps: Some(a.ulRxRate as f64 / 1000.0).filter(|&r| r > 0.0),
+                mcs: None,
+                nss: None,
+            }
+        }))
 }
 
 pub fn scan(opts: &ScanOptions) -> Result<ScanOutput, ScanError> {
     let c = open()?;
-    let ifs = list_ifaces(&c)?;
-    let (guid, name) = match &opts.interface {
-        Some(id) => ifs.iter().find(|(g, n)| &guid_str(g) == id || n == id),
-        None => ifs.first(),
-    }
-    .cloned()
-    .ok_or(ScanError::NoInterface)?;
+    let (guid, name) = pick(&c, opts.interface.as_deref())?;
     let mut warnings = Vec::new();
 
     if opts.trigger {
@@ -135,7 +159,7 @@ pub fn scan(opts: &ScanOptions) -> Result<ScanOutput, ScanError> {
     if r != ERROR_SUCCESS || list.is_null() {
         return Err(ScanError::Os(format!("WlanGetNetworkBssList failed ({r})")));
     }
-    let connected = connected_bssid(&c, &guid);
+    let connected = current_connection(&c, &guid).map(|a| a.dot11Bssid);
     let mut bss = Vec::new();
     unsafe {
         let n = (*list).dwNumberOfItems as usize;

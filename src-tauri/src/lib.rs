@@ -6,11 +6,12 @@ use tauri::{Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_updater::UpdaterExt;
 use wifi_core::{analyze, BssInfo, OuiDb};
-use wifi_scan::{Interface, ScanOptions};
+use wifi_scan::{Interface, LinkInfo, ScanOptions};
 
 const OUI_URL: &str = "https://standards-oui.ieee.org/oui/oui.csv";
 /// Published releases, newest first, pre-releases included (drafts are hidden without auth).
-const RELEASES_API: &str = "https://api.github.com/repos/tsuyopon123/wifisight/releases?per_page=20";
+const RELEASES_API: &str =
+    "https://api.github.com/repos/tsuyopon123/wifisight/releases?per_page=20";
 
 struct AppState {
     oui: Arc<Mutex<Option<OuiDb>>>,
@@ -61,8 +62,7 @@ fn platform_info(app: tauri::AppHandle, state: State<'_, AppState>) -> PlatformI
             .map(|d| d.len())
             .unwrap_or(0),
         installable: !cfg!(windows)
-            || std::env::current_exe()
-                .is_ok_and(|p| p.with_file_name("uninstall.exe").exists()),
+            || std::env::current_exe().is_ok_and(|p| p.with_file_name("uninstall.exe").exists()),
     }
 }
 
@@ -114,6 +114,38 @@ async fn list_interfaces(probe: Option<String>) -> Result<Vec<Interface>, String
     .map_err(|e| e.to_string())?
 }
 
+/// "?iface=<percent-encoded>" for probe requests, "" for the probe's default interface.
+fn iface_query(iface: Option<String>) -> String {
+    iface
+        .map(|i| {
+            let enc: String = i
+                .bytes()
+                .map(|c| match c {
+                    b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                        (c as char).to_string()
+                    }
+                    _ => format!("%{c:02X}"),
+                })
+                .collect();
+            format!("?iface={enc}")
+        })
+        .unwrap_or_default()
+}
+
+/// Current link of the interface (local or on the probe); polled every second, no scan.
+#[tauri::command]
+async fn link_info(
+    iface: Option<String>,
+    probe: Option<String>,
+) -> Result<Option<LinkInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || match probe.filter(|p| !p.trim().is_empty()) {
+        Some(p) => probe_get(&p, &format!("/link{}", iface_query(iface))),
+        None => wifi_scan::link(iface.as_deref()).map_err(|e| e.to_string()),
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 async fn scan(
     state: State<'_, AppState>,
@@ -124,21 +156,7 @@ async fn scan(
     tauri::async_runtime::spawn_blocking(move || {
         let probe = probe.filter(|p| !p.trim().is_empty());
         let (interface, raws, warnings) = if let Some(p) = probe {
-            let q = iface
-                .map(|i| {
-                    let enc: String = i
-                        .bytes()
-                        .map(|c| match c {
-                            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
-                                (c as char).to_string()
-                            }
-                            _ => format!("%{c:02X}"),
-                        })
-                        .collect();
-                    format!("?iface={enc}")
-                })
-                .unwrap_or_default();
-            let o: wifi_scan::ScanOutput = probe_get(&p, &format!("/scan{q}"))?;
+            let o: wifi_scan::ScanOutput = probe_get(&p, &format!("/scan{}", iface_query(iface)))?;
             (format!("probe:{}", o.interface), o.bss, o.warnings)
         } else {
             let o = wifi_scan::scan(&ScanOptions {
@@ -215,7 +233,8 @@ fn beta_manifest_url() -> Result<tauri::Url, String> {
         .body_mut()
         .read_to_string()
         .map_err(|e| format!("release list: {e}"))?;
-    let releases: Vec<Release> = serde_json::from_str(&body).map_err(|e| format!("release list: {e}"))?;
+    let releases: Vec<Release> =
+        serde_json::from_str(&body).map_err(|e| format!("release list: {e}"))?;
     let url = releases
         .into_iter()
         .flat_map(|r| r.assets)
@@ -239,7 +258,10 @@ struct UpdateMetadata {
 /// The updater plugin's `check` with a beta channel added (its JS `check()` can't change the
 /// endpoint). Returns what the JS `Update` class takes, so download/install stay the plugin's.
 #[tauri::command]
-async fn check_update(webview: tauri::Webview, beta: bool) -> Result<Option<UpdateMetadata>, String> {
+async fn check_update(
+    webview: tauri::Webview,
+    beta: bool,
+) -> Result<Option<UpdateMetadata>, String> {
     let mut builder = webview.updater_builder();
     if beta {
         let url = tauri::async_runtime::spawn_blocking(beta_manifest_url)
@@ -275,7 +297,8 @@ fn save_with_dialog(
         .set_parent(window)
         .set_file_name(name)
         .add_filter(ext.to_uppercase(), &[ext])
-        .blocking_save_file() // async command: off the main thread, like the plugin's own save
+        .blocking_save_file()
+    // async command: off the main thread, like the plugin's own save
     else {
         return Ok(None);
     };
@@ -352,6 +375,7 @@ pub fn run() {
             list_interfaces,
             probe_info,
             scan,
+            link_info,
             update_oui_db,
             save_text,
             autosave_write,

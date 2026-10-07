@@ -37,9 +37,22 @@ It runs on macOS, Windows, and Linux. All parsing happens in the shared `wifi-co
 
 - **Scanner**: lists nearby BSSes with SSID, BSSID, vendor, AP name, channel and width, RSSI, noise, SNR, security, PHY, NSS, max PHY rate, client count, channel utilization, 11k/v/r, and country code. Also shows signal history, a 2.4/5/6 GHz spectrum, per-channel utilization, and every IE decoded
 - **Survey**: click your position on a floor plan to take a measurement; the app draws heatmaps and estimates AP locations. Surveys are saved as `*.survey.json`
+- **Link and roaming log**: checks the associated AP every second, even while scanning is paused. The status bar shows the link rate, and the roaming log records each AP change with RSSI and TX rate before and after (see [below](#link-rates-and-roaming))
 - **External probe**: measure from a separate device. See [docs/probe.md](docs/probe.md) (Japanese)
 - **CLI**: the same analysis as the GUI, as a table, JSON, or a JSONL log
 - **Export**: CSV and JSON
+
+### Link rates and roaming
+
+What each OS reports for the current link:
+
+| OS | TX rate | RX rate | MCS / NSS |
+|---|---|---|---|
+| Linux | ✓ | ✓ | ✓ (HT/VHT/HE/EHT) |
+| macOS | ✓ | – | ✓ (read via private CoreWLAN API; may disappear in a future macOS) |
+| Windows | ✓ | ✓ | – |
+
+macOS and Windows 11 24H2+ report the BSSID only with location access, so without it there is no link to show. On a Linux Wi-Fi 7 multi-link connection, the AP MLD address stands in for the BSSID.
 
 Filter the list with expressions like `band:5 !sec:open, rssi<-75` (space = AND, comma = OR, `!` = NOT). Press `?` in the app for the full filter syntax and keyboard shortcuts.
 
@@ -101,6 +114,7 @@ wifisight-cli scan                # table
 wifisight-cli scan --json         # parsed JSON
 wifisight-cli scan --raw          # raw data from the OS (IEs as hex)
 wifisight-cli watch --interval 5 -o survey.jsonl
+wifisight-cli link                # current link (BSSID, rates, MCS) as JSON
 wifisight-cli serve               # run as an external probe on :8737
 ```
 

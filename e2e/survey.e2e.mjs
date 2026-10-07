@@ -11,7 +11,8 @@ import { createServer } from "vite";
 const BSSID = "aa:bb:cc:dd:ee:01";
 
 const MOCK = `(() => {
-  const m = (window.__mock = { rssi: { en0: -50, en1: -50 }, fail: false, failN: { en0: 0, en1: 0 }, delay: 300, autosave: null, scans: 0, errors: 0 });
+  const m = (window.__mock = { rssi: { en0: -50, en1: -50 }, fail: false, failN: { en0: 0, en1: 0 }, delay: 300, autosave: null, scans: 0, errors: 0,
+    link: { bssid: "${BSSID}", ssid: "event-net", rssiDbm: -70, txMbps: 866.7, rxMbps: null, mcs: 11, nss: 2 } });
   const bss = (rssi) => ({ bssid: "${BSSID}", ssid: "event-net", hidden: false, vendor: null, locallyAdministered: false, apName: "hall-1", model: null,
     band: "5", freqMhz: 5180, channel: 36, centerChannel: 36, centerFreqMhz: 5180, widthMhz: 20, freqLowMhz: 5170, freqHighMhz: 5190,
     rssiDbm: rssi, noiseDbm: null, snrDb: null, phyModes: ["a", "n", "ac"], generation: "Wi-Fi 5 (802.11ac)", maxRateMbps: 433.3, spatialStreams: 1,
@@ -39,6 +40,7 @@ const MOCK = `(() => {
           m.scans++;
           return { timestampMs: Date.now(), interface: iface, bss: [bss(rssi)], warnings: [] };
         }
+        case "link_info": return m.link;
         case "autosave_read": return m.autosave;
         case "autosave_write": m.autosave = args.contents; return null;
         default:
@@ -333,6 +335,19 @@ try {
     await waitFor(measuredExpr(n0), 10000);
     await setN("0");
     await ev(`window.__mock.delay = 300`);
+  }
+
+  // ───────── link poll: roaming log ─────────
+  {
+    check("L1 nothing logged while the AP stays (interface switches included)", await ev(`document.getElementById("st-roams").hidden`), true);
+    await ev(`window.__mock.link = { ...window.__mock.link, bssid: "aa:bb:cc:dd:ee:02", rssiDbm: -48, txMbps: 1200 }`);
+    await waitFor(`!document.getElementById("st-roams").hidden`, 5000);
+    check("L2 status bar counts the roam", await ev(`document.getElementById("st-roams").textContent`), "1 roam");
+    check("L3 status bar shows the rates", (await ev(`document.getElementById("st-scan").textContent`)).includes("tx 1200 Mbps · MCS 11 (2 streams)"), true);
+    await ev(`document.getElementById("st-roams").click()`);
+    const row = await ev(`[...document.querySelectorAll("#roams-table tbody td")].slice(1).map((td) => td.textContent).join("|")`);
+    check("L4 log row names the old AP from the scan", row, "roam|hall-1 (aa:bb:cc:dd:ee:01)|aa:bb:cc:dd:ee:02|-70 → -48|867 → 1200|");
+    await ev(`document.getElementById("dlg-roams").close()`);
   }
 
   ws.close();

@@ -173,7 +173,7 @@
 
     <footer class="statusbar">
       <span><span id="st-platform"></span><button type="button" id="st-update" class="st-link" title="Open Settings to update" hidden></button></span>
-      <span id="st-scan"></span>
+      <span><span id="st-scan"></span><button type="button" id="st-roams" class="st-link" title="Roaming log" hidden></button></span>
       <span id="st-count"></span>
       <span id="st-warn" class="warn"></span>
     </footer>
@@ -259,6 +259,23 @@
           <dt><code>ssid:"Free Wi-Fi"</code></dt><dd>Quotes keep spaces in one term</dd>
         </dl>
         <div class="dlg-actions">
+          <button value="close" class="primary">Done</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="dlg-roams" aria-labelledby="dlg-roams-title">
+      <form method="dialog">
+        <h2 id="dlg-roams-title">Roaming log</h2>
+        <p>Changes of the associated AP, checked every second, also while scanning is paused.</p>
+        <div class="roams-wrap">
+          <table class="mini" id="roams-table">
+            <thead><tr><th>Time</th><th>Event</th><th>From</th><th>To</th><th class="num">RSSI (dBm)</th><th class="num">TX (Mbps)</th><th class="num">Gap</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="dlg-actions">
+          <button type="button" id="roams-clear">Clear</button>
+          <button type="button" id="roams-csv">Export CSV</button>
           <button value="close" class="primary">Done</button>
         </div>
       </form>
