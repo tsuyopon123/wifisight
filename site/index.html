@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WiFiSight</title>
+  <meta name="description" content="Free Wi-Fi scanner and site survey tool that shows every AP by its hostname. Heatmaps, channel utilization, a roaming log, and a CLI, for macOS, Windows, and Linux." />
+  <link rel="canonical" href="https://wifisight.tsuyopon.dev/" />
+  <link rel="alternate" hreflang="en" href="https://wifisight.tsuyopon.dev/" />
+  <link rel="alternate" hreflang="ja" href="https://wifisight.tsuyopon.dev/ja/" />
+  <link rel="alternate" hreflang="x-default" href="https://wifisight.tsuyopon.dev/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="WiFiSight" />
+  <meta property="og:title" content="WiFiSight" />
+  <meta property="og:description" content="Free Wi-Fi scanner and site survey tool that shows every AP by its hostname." />
+  <meta property="og:url" content="https://wifisight.tsuyopon.dev/" />
+  <meta property="og:image" content="https://wifisight.tsuyopon.dev/img/og.png" />
+  <meta property="og:image:width" content="2400" />
+  <meta property="og:image:height" content="1260" />
+  <meta property="og:image:alt" content="WiFiSight logo" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:locale:alternate" content="ja_JP" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+  <link rel="icon" href="img/icon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="download.js" defer></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "WiFiSight", "url": "https://wifisight.tsuyopon.dev/", "inLanguage": "en", "description": "Free Wi-Fi scanner and site survey tool that shows every AP by its hostname. Heatmaps, channel utilization, a roaming log, and a CLI, for macOS, Windows, and Linux.", "applicationCategory": "UtilitiesApplication", "operatingSystem": "macOS, Windows, Linux", "image": "https://wifisight.tsuyopon.dev/img/og.png", "downloadUrl": "https://github.com/tsuyopon123/wifisight/releases/latest", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}}</script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="./"><img src="img/icon.svg" alt="" width="24" height="24" />WiFiSight</a>
+      <nav aria-label="Site">
+        <a href="./" hreflang="en" aria-current="true">English</a>
+        <a href="ja/" hreflang="ja" lang="ja">日本語</a>
+        <a class="gh" href="https://github.com/tsuyopon123/wifisight">GitHub</a>
+        <a class="pill" href="#install">Download</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="section hero">
+      <div class="wrap">
+        <p class="name">WiFiSight</p>
+        <h1>Every AP, by&nbsp;name</h1>
+        <p class="sub">Built for Wi-Fi site surveys. From the first survey to checking the installation and monitoring it live, all in one app.</p>
+        <div class="links">
+          <a class="btn" href="#install">Download</a>
+          <a class="chev" href="https://github.com/tsuyopon123/wifisight">View on GitHub</a>
+        </div>
+        <p class="note">For macOS, Windows, and Linux. Free.</p>
+      </div>
+      <figure class="shot">
+        <img src="img/scanner.png" width="2880" height="1800" alt="WiFiSight's scanner: a list of nearby BSSes with AP hostnames such as AP-HALL-A-01, the 5 GHz spectrum below, and the selected BSS decoded on the right." />
+      </figure>
+      <ul class="facts wrap">
+        <li><strong>Every BSS around you</strong>SSID, BSSID, vendor, AP hostname, channel and width, RSSI, security, client count, channel utilization, and more, side by side.</li>
+        <li><strong>Every IE decoded</strong>Select a BSS to read every information element it sends, with its capabilities and 11k/v/r support.</li>
+        <li><strong>Filter and export</strong>Narrow the list with expressions like <code>band:5 !sec:open, rssi&lt;-75</code>. Export the table as CSV or the whole session as JSON.</li>
+      </ul>
+    </section>
+
+    <section class="section alt">
+      <div class="wrap">
+        <h2>Three things that help in the field</h2>
+        <div class="tiles">
+          <div class="tile">
+            <h3>AP hostnames, right in the list</h3>
+            <p>WiFiSight reads the hostname each AP sends in its beacons and shows it in the list. Spot a weak or misbehaving AP on the spot, without matching BSSIDs against the controller. It understands the formats of many enterprise AP vendors.</p>
+            <p class="fine">APs send their hostname only when the controller is set to, such as Aruba's <code>advertise-ap-name</code>.</p>
+          </div>
+          <div class="tile">
+            <h3>Let a probe do the measuring</h3>
+            <p>Run <code>wifisight-cli serve</code> on a Raspberry Pi or mini PC and it does the scanning. Leave it somewhere else on site and watch that spot over the LAN.</p>
+            <p>Or keep it beside you: the probe stays unassociated, so the OS doesn't throttle its scans, every scan runs the same way, and your laptop stays online.</p>
+          </div>
+          <div class="tile">
+            <h3>Same analysis on every OS</h3>
+            <p>It runs on macOS, Windows, and Linux. One shared core parses every scan, so the same air gives the same results whichever laptop you brought.</p>
+            <p class="fine">Some fields depend on what the OS reports (<a href="#os">differences by OS</a>).</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrap">
+        <h2>Survey</h2>
+        <p class="sub">Open the floor plan and click where you stand to take a measurement. WiFiSight paints the heatmap and estimates where each AP is.</p>
+      </div>
+      <figure class="shot"><img src="img/survey.png" width="2880" height="1800" loading="lazy" alt="Survey mode: a convention center floor plan with 40 measured points, a signal heatmap for the TechConf SSID, and estimated AP positions." /></figure>
+      <ul class="facts wrap">
+        <li><strong>Four heatmaps</strong>Strongest signal, the second-best AP for roaming, co-channel APs, or SNR, per SSID, AP, or BSSID.</li>
+        <li><strong>Instant or averaged</strong>Record the latest scan right away, or average 1, 3, or 5 scans per point.</li>
+        <li><strong>Save and export</strong>Saved as <code>.survey.json</code> to reopen later, or exported as PNG for the report.</li>
+      </ul>
+    </section>
+
+    <section class="section alt">
+      <div class="wrap">
+        <h2>Channel utilization</h2>
+        <p class="sub">How busy each channel is, from the BSS Load the APs report. The spectrum view draws every BSS at its real width on 2.4, 5, and 6 GHz.</p>
+      </div>
+      <figure class="shot"><img src="img/channels.png" width="2016" height="784" loading="lazy" alt="Channel utilization bars for 2.4, 5, and 6 GHz, with the number of BSSes on each channel." /></figure>
+    </section>
+
+    <section class="section">
+      <div class="wrap">
+        <h2>Signal history</h2>
+        <p class="sub">Every BSS from the last minute to the last hour. Select one in the list to bring it out.</p>
+      </div>
+      <figure class="shot"><img src="img/signal.png" width="2016" height="784" loading="lazy" alt="Signal history chart for the last minute with the selected TechConf BSS highlighted." /></figure>
+    </section>
+
+    <section class="section alt">
+      <div class="wrap">
+        <h2>Roaming</h2>
+        <p class="sub">The connected AP is checked every second, even while scanning is paused. Each change is logged with RSSI and data rate before and after.</p>
+      </div>
+      <figure class="shot narrow"><img src="img/roaming.png" width="1640" height="496" loading="lazy" alt="Roaming log: three roams from AP-HALL-A-01 through AP-HALL-A-02 and AP-HALL-B-02 to AP-FOYER-01, each with RSSI and data rate before and after." /></figure>
+    </section>
+
+    <section class="section dark">
+      <div class="wrap">
+        <h2>Command line</h2>
+        <p class="sub"><code>wifisight-cli</code> gives the same analysis as a table, JSON, or a JSONL log, and runs the external probe. Builds for Linux on x86_64 and arm64, macOS, and Windows.</p>
+      </div>
+<pre><code><span class="p">$</span> wifisight-cli scan
+SSID                     BSSID             BAND   CH  CTR WIDTH RSSI SECURITY             PHY        MAXRATE  STA  UTIL  VENDOR / AP
+TechConf                 00:3a:99:10:00:00  2.4    1    1    20  -45 WPA2/WPA3-Personal   b/g/n/ax       287   12   41%  Cisco Systems, Inc / AP-HALL-A-01
+TechConf                 00:3a:99:10:00:0f    5   36   38    40  -50 WPA2/WPA3-Personal   a/n/ac/ax      574   10   18%  Cisco Systems, Inc / AP-HALL-A-01
+OpenRoaming              00:3a:99:10:00:0e    5   36   38    40  -53 WPA2/WPA3-Enterprise a/n/ac/ax      574    4   18%  Cisco Systems, Inc / AP-HALL-A-01
+TechConf-6G              00:3a:99:10:60:01    6   37   47   160  -54 WPA3-Personal        ax            2402    7    9%  Cisco Systems, Inc / AP-HALL-A-01
+TechConf                 00:3a:99:11:00:0f    5   44   46    40  -65 WPA2/WPA3-Personal   a/n/ac/ax      574   21   27%  Cisco Systems, Inc / AP-HALL-A-02
+HOTEL_GUEST              1c:b1:7f:30:00:03  2.4    1    1    20  -88 Open                 b/g/n          144             NEC Platforms, Ltd.
+
+<span class="p">$</span> wifisight-cli watch --interval 5 -o survey.jsonl   <span class="c"># log every scan</span>
+<span class="p">$</span> wifisight-cli serve                               <span class="c"># run as an external probe on :8737</span></code></pre>
+    </section>
+
+    <section class="section" id="faq">
+      <div class="wrap">
+        <h2>Questions</h2>
+        <dl class="faq">
+          <dt>What is WiFiSight?</dt>
+          <dd>WiFiSight is a free Wi-Fi scanner (Wi-Fi analyzer) and site survey tool in one. It lists nearby access points, decodes every IE, and shows channel utilization, signal history, survey heatmaps, and a roaming log, with the same screens on macOS, Windows, and Linux.</dd>
+          <dt>Is it free?</dt>
+          <dd>Yes. Every feature is free.</dd>
+          <dt>Why don't I see AP hostnames?</dt>
+          <dd>APs include their hostname in beacons only when the controller or AP is set to advertise it. On Aruba, turn on <code>advertise-ap-name</code> for each SSID.</dd>
+          <dt>Why are SSIDs or BSSIDs missing?</dt>
+          <dd>macOS and Windows 11 24H2 or later need location access. macOS asks on first launch. On Windows, turn on Settings › Privacy &amp; security › Location › "Let desktop apps access your location".</dd>
+        </dl>
+      </div>
+    </section>
+
+    <section class="section alt" id="install">
+      <div class="wrap">
+        <h2>Download</h2>
+        <p class="note" hidden>Latest release <span data-version></span></p>
+        <div class="tiles">
+          <div class="tile">
+            <h3>macOS</h3>
+            <p class="os">macOS 11 or later, Apple Silicon and Intel</p>
+            <p class="get"><a class="btn" href="https://github.com/tsuyopon123/wifisight/releases/latest" data-asset="_universal.dmg">Download .dmg</a></p>
+            <p>Copy the app to Applications. Allow Location Services when asked: macOS hides SSIDs and BSSIDs without it.</p>
+          </div>
+          <div class="tile">
+            <h3>Windows</h3>
+            <p class="os">Windows 10 and 11, x64</p>
+            <p class="get"><a class="btn" href="https://github.com/tsuyopon123/wifisight/releases/latest" data-asset="_x64-setup.exe">Installer</a><a class="btn alt" href="https://github.com/tsuyopon123/wifisight/releases/latest" data-asset="_x64-portable.exe">Portable</a></p>
+            <p>The portable version runs without installing, but needs WebView2, which Windows 11 includes.</p>
+          </div>
+          <div class="tile">
+            <h3>Linux</h3>
+            <p class="os">Debian, Ubuntu, and derivatives</p>
+            <p class="get"><a class="btn" href="https://github.com/tsuyopon123/wifisight/releases/latest" data-asset="_amd64.deb">.deb (x64)</a><a class="btn alt" href="https://github.com/tsuyopon123/wifisight/releases/latest" data-asset="_arm64.deb">.deb (arm64)</a></p>
+            <p>Install with <code>sudo apt install ./&lt;file&gt;.deb</code>.</p>
+          </div>
+        </div>
+        <div class="links">
+          <a class="chev" href="https://github.com/tsuyopon123/wifisight/releases/latest">CLI and probe packages (Releases)</a>
+          <a class="chev" href="https://github.com/tsuyopon123/wifisight#readme">Read the full README</a>
+        </div>
+        <div class="firstrun">
+          <h3>First launch</h3>
+          <p>The app isn't code-signed yet, so you'll see a warning the first time.</p>
+          <ul>
+            <li><strong>macOS</strong>: if it's blocked, click Open Anyway in System Settings › Privacy &amp; Security.</li>
+            <li><strong>Windows</strong>: on the SmartScreen dialog, click More info, then Run anyway.</li>
+          </ul>
+        </div>
+        <div class="firstrun" id="os">
+          <h3>Differences by OS</h3>
+          <p>Some fields depend on what the OS reports.</p>
+          <div class="spec">
+            <table>
+              <thead><tr><th scope="col">OS</th><th scope="col">Noise / SNR</th><th scope="col">TX rate</th><th scope="col">RX rate</th><th scope="col">MCS / NSS</th></tr></thead>
+              <tbody>
+                <tr><th scope="row">Linux</th><td>✓<sup>1</sup></td><td>✓</td><td>✓</td><td>✓</td></tr>
+                <tr><th scope="row">macOS</th><td>✓</td><td>✓</td><td>–</td><td>✓<sup>2</sup></td></tr>
+                <tr><th scope="row">Windows</th><td>–</td><td>✓</td><td>✓</td><td>–</td></tr>
+              </tbody>
+            </table>
+            <p class="fine">1. Only where the driver reports it.</p>
+            <p class="fine">2. Read through a private API, which a future macOS may remove.</p>
+            <p class="fine">TX rate, RX rate, and MCS / NSS describe the current link. On macOS and Windows 11 24H2 or later, the BSSID needs location access. Without it, there is no link to show.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span>Use this software at your own risk.</span>
+      <a href="https://github.com/tsuyopon123/wifisight">GitHub</a>
+      <a href="ja/" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </footer>
+</body>
+</html>

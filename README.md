@@ -4,6 +4,8 @@
 
 English | [日本語](README.ja.md)
 
+Website: https://wifisight.tsuyopon.dev/
+
 WiFiSight is a Wi-Fi scanner for event NOCs. One tool covers the venue survey, post-setup verification, and monitoring during the event.
 
 ## Highlights
@@ -158,6 +160,7 @@ The per-OS scanners only collect raw BSS data and IEs; all parsing happens in th
 | `crates/wifi-cli` | CLI (`wifisight-cli`) |
 | `src-tauri` | Tauri backend |
 | `src` | UI (TypeScript, Canvas) |
+| `site` | Website (static HTML, published to GitHub Pages) |
 
 ### Tests
 
@@ -165,6 +168,7 @@ The per-OS scanners only collect raw BSS data and IEs; all parsing happens in th
 cargo test -p wifi-core -p wifi-scan -p wifi-cli
 npm run check                # UI self-checks (src/*.check.ts)
 npm run e2e                  # survey UI in headless Chrome (needs Chrome; set CHROME if it isn't found)
+npm run screenshots          # regenerate the website screenshots in site/img/ from mock data
 ```
 
 GitHub Actions runs the tests on macOS, Windows, and Ubuntu and builds the CLI and GUI bundles. Pushing a `v*` tag creates a draft release with the bundles attached.
