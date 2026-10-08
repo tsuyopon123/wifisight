@@ -48,13 +48,13 @@
     <section class="section hero">
       <div class="wrap">
         <p class="name">WiFiSight</p>
-        <h1>Every AP, by&nbsp;name</h1>
-        <p class="sub">Built for Wi-Fi site surveys. From the first survey to checking the installation and monitoring it live, all in one app.</p>
+        <h1>The <span class="nowrap">Wi-Fi</span> scanner that shows AP&nbsp;hostnames</h1>
+        <p class="sub">Made for Wi-Fi site surveys. Pre&#8209;installation surveys, post&#8209;installation checks, and monitoring in operation, all in one.</p>
         <div class="links">
           <a class="btn" href="#install">Download</a>
           <a class="chev" href="https://github.com/tsuyopon123/wifisight">View on GitHub</a>
         </div>
-        <p class="note">For macOS, Windows, and Linux. Free.</p>
+        <p class="note">For macOS, Windows, and Linux. Free to use.</p>
       </div>
       <figure class="shot">
         <img src="img/scanner.png" width="2880" height="1800" alt="WiFiSight's scanner: a list of nearby BSSes with AP hostnames such as AP-HALL-A-01, the 5 GHz spectrum below, and the selected BSS decoded on the right." />
@@ -68,10 +68,10 @@
 
     <section class="section alt">
       <div class="wrap">
-        <h2>Three things that help in the field</h2>
+        <h2>Three features that help in the field</h2>
         <div class="tiles">
           <div class="tile">
-            <h3>AP hostnames, right in the list</h3>
+            <h3>AP hostnames, shown as they are</h3>
             <p>WiFiSight reads the hostname each AP sends in its beacons and shows it in the list. Spot a weak or misbehaving AP on the spot, without matching BSSIDs against the controller. It understands the formats of many enterprise AP vendors.</p>
             <p class="fine">APs send their hostname only when the controller is set to, such as Aruba's <code>advertise-ap-name</code>.</p>
           </div>
@@ -97,7 +97,7 @@
       <figure class="shot"><img src="img/survey.png" width="2880" height="1800" loading="lazy" alt="Survey mode: a convention center floor plan with 40 measured points, a signal heatmap for the TechConf SSID, and estimated AP positions." /></figure>
       <ul class="facts wrap">
         <li><strong>Four heatmaps</strong>Strongest signal, the second-best AP for roaming, co-channel APs, or SNR, per SSID, AP, or BSSID.</li>
-        <li><strong>Instant or averaged</strong>Record the latest scan right away, or average 1, 3, or 5 scans per point.</li>
+        <li><strong>Choose scans per point</strong>Record the latest scan right away, or scan 1, 3, or 5 times and average them.</li>
         <li><strong>Save and export</strong>Saved as <code>.survey.json</code> to reopen later, or exported as PNG for the report.</li>
       </ul>
     </section>
@@ -148,13 +148,13 @@ HOTEL_GUEST              1c:b1:7f:30:00:03  2.4    1    1    20  -88 Open       
       <div class="wrap">
         <h2>Questions</h2>
         <dl class="faq">
-          <dt>What is WiFiSight?</dt>
+          <dt>What kind of tool is it?</dt>
           <dd>WiFiSight is a free Wi-Fi scanner (Wi-Fi analyzer) and site survey tool in one. It lists nearby access points, decodes every IE, and shows channel utilization, signal history, survey heatmaps, and a roaming log, with the same screens on macOS, Windows, and Linux.</dd>
           <dt>Is it free?</dt>
-          <dd>Yes. Every feature is free.</dd>
-          <dt>Why don't I see AP hostnames?</dt>
+          <dd>Yes. All features are free to use.</dd>
+          <dt>AP hostnames don't show up.</dt>
           <dd>APs include their hostname in beacons only when the controller or AP is set to advertise it. On Aruba, turn on <code>advertise-ap-name</code> for each SSID.</dd>
-          <dt>Why are SSIDs or BSSIDs missing?</dt>
+          <dt>SSIDs or BSSIDs don't show up.</dt>
           <dd>macOS and Windows 11 24H2 or later need location access. macOS asks on first launch. On Windows, turn on Settings › Privacy &amp; security › Location › "Let desktop apps access your location".</dd>
         </dl>
       </div>
@@ -198,7 +198,7 @@ HOTEL_GUEST              1c:b1:7f:30:00:03  2.4    1    1    20  -88 Open       
         </div>
         <div class="firstrun" id="os">
           <h3>Differences by OS</h3>
-          <p>Some fields depend on what the OS reports.</p>
+          <p>What you can get depends on the OS.</p>
           <div class="spec">
             <table>
               <thead><tr><th scope="col">OS</th><th scope="col">Noise / SNR</th><th scope="col">TX rate</th><th scope="col">RX rate</th><th scope="col">MCS / NSS</th></tr></thead>
