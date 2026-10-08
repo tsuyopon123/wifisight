@@ -173,12 +173,6 @@ try {
   await ev(`document.querySelector('#bss-table tr[data-bssid="00:3a:99:10:00:0f"]').click()`);
   await ev(`document.querySelector('#tabs [data-tab="5"]').click()`);
   await shot("scanner.png");
-  // link preview (og:image): the top of the scanner at 1.91:1, 2400×1256
-  {
-    const { data } = await send("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 1440, height: 754, scale: 0.8333 } });
-    writeFileSync(new URL("og.png", OUT), Buffer.from(data, "base64"));
-    console.log("wrote site/img/og.png");
-  }
   await ev(`document.querySelector('#tabs [data-tab="load"]').click()`);
   await shot("channels.png", "#bottom");
   await ev(`document.querySelector('#tabs [data-tab="signal"]').click()`);
@@ -265,6 +259,12 @@ try {
   await ev(`document.getElementById("btn-run").click()`); // pause, so the status bar doesn't tick in the shot
   await waitFor(`document.getElementById("sv-toast").hidden`, 10000);
   await shot("survey.png");
+
+  // link preview (og:image): logo and name only, so the card says what it is at any size
+  await send("Emulation.setDeviceMetricsOverride", { width: 1200, height: 630, deviceScaleFactor: 2, mobile: false });
+  await send("Page.navigate", { url: base + "scripts/og.html" });
+  await waitFor(`document.querySelector("img").complete`);
+  await shot("og.png");
 } catch (e) {
   failed = true;
   console.error(e);
