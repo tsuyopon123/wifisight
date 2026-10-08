@@ -4,6 +4,8 @@
 
 [English](README.md) | 日本語
 
+Web サイト：https://wifisight.tsuyopon.dev/ja/
+
 WiFiSight は、イベント NOC のための Wi-Fi スキャナです。
 会場の事前サーベイから設営後の検証、会期中の監視までを 1 つのツールでこなせます。
 
@@ -153,6 +155,7 @@ macOS の位置情報の権限は `.app` ごとに付与されるため、`npm r
 | `crates/wifi-cli` | CLI（`wifisight-cli`） |
 | `src-tauri` | Tauri のバックエンド |
 | `src` | UI（TypeScript、Canvas） |
+| `site` | Web サイト（静的 HTML。GitHub Pages で公開） |
 
 ### テスト
 
@@ -160,6 +163,7 @@ macOS の位置情報の権限は `.app` ごとに付与されるため、`npm r
 cargo test -p wifi-core -p wifi-scan -p wifi-cli
 npm run check                # UI の自己チェック（src/*.check.ts）
 npm run e2e                  # サーベイ画面を headless Chrome で確認（Chrome が必要。見つからなければ CHROME にパスを設定）
+npm run screenshots          # Web サイトのスクショ（site/img/）をモックデータで撮り直す
 ```
 
 GitHub Actions が macOS、Windows、Ubuntu でテストを実行し、CLI と GUI のバンドルを作ります。

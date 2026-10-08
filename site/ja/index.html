@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WiFiSight｜AP ホスト名が見える無料の Wi-Fi スキャナ・現場調査ツール</title>
+  <meta name="description" content="AP ホスト名がそのまま見える、無料の Wi-Fi スキャナ・現場調査（サイトサーベイ）ツール。ヒートマップ、チャネル使用率、ローミングログ、CLI。macOS、Windows、Linux に対応。" />
+  <link rel="canonical" href="https://wifisight.tsuyopon.dev/ja/" />
+  <link rel="alternate" hreflang="en" href="https://wifisight.tsuyopon.dev/" />
+  <link rel="alternate" hreflang="ja" href="https://wifisight.tsuyopon.dev/ja/" />
+  <link rel="alternate" hreflang="x-default" href="https://wifisight.tsuyopon.dev/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="WiFiSight" />
+  <meta property="og:title" content="WiFiSight｜AP ホスト名が見える無料の Wi-Fi スキャナ・現場調査ツール" />
+  <meta property="og:description" content="AP ホスト名がそのまま見える、無料の Wi-Fi スキャナ・現場調査ツール。" />
+  <meta property="og:url" content="https://wifisight.tsuyopon.dev/ja/" />
+  <meta property="og:image" content="https://wifisight.tsuyopon.dev/img/og.png" />
+  <meta property="og:image:width" content="2400" />
+  <meta property="og:image:height" content="1257" />
+  <meta property="og:image:alt" content="周囲のアクセスポイントをホスト名付きで一覧表示する WiFiSight のスキャナ画面" />
+  <meta property="og:locale" content="ja_JP" />
+  <meta property="og:locale:alternate" content="en_US" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+  <link rel="icon" href="../img/icon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&family=Noto+Sans+JP:wght@400;500;700&display=swap" />
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../download.js" defer></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "WiFiSight", "url": "https://wifisight.tsuyopon.dev/ja/", "inLanguage": "ja", "description": "AP ホスト名がそのまま見える、無料の Wi-Fi スキャナ・現場調査（サイトサーベイ）ツール。ヒートマップ、チャネル使用率、ローミングログ、CLI。macOS、Windows、Linux に対応。", "applicationCategory": "UtilitiesApplication", "operatingSystem": "macOS, Windows, Linux", "image": "https://wifisight.tsuyopon.dev/img/og.png", "downloadUrl": "https://github.com/tsuyopon123/wifisight/releases/latest", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "JPY"}}</script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="./"><img src="../img/icon.svg" alt="" width="24" height="24" />WiFiSight</a>
+      <nav aria-label="サイト">
+        <a href="../" hreflang="en" lang="en">English</a>
+        <a href="./" hreflang="ja" aria-current="true">日本語</a>
+        <a class="gh" href="https://github.com/tsuyopon123/wifisight">GitHub</a>
+        <a class="pill" href="#install">ダウンロード</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="section hero">
+      <div class="wrap">
+        <p class="name">WiFiSight</p>
+        <h1>AP&nbsp;ホスト名が<span class="nowrap">そのまま見える</span><br><span class="nowrap">Wi-Fi スキャナ</span></h1>
+        <p class="sub">Wi-Fi の現場調査に特化。事前の調査から設置後の確認、運用中の監視まで、これ&nbsp;1&nbsp;つで。</p>
+        <div class="links">
+          <a class="btn" href="#install">ダウンロード</a>
+          <a class="chev" href="https://github.com/tsuyopon123/wifisight">GitHub で見る</a>
+        </div>
+        <p class="note">macOS、Windows、Linux に対応。無料で使えます。</p>
+      </div>
+      <figure class="shot">
+        <img src="../img/scanner.png" width="2880" height="1800" alt="WiFiSight のスキャナ画面。AP-HALL-A-01 などの AP ホスト名付きの BSS 一覧、下に 5 GHz のスペクトラム、右に選択した BSS のデコード結果。" />
+      </figure>
+      <ul class="facts wrap">
+        <li><strong>周囲の BSS を一覧に</strong>SSID、BSSID、ベンダー、AP&nbsp;ホスト名、チャネルと帯域幅、RSSI、セキュリティ、接続数、チャネル使用率などを並べて表示します。</li>
+        <li><strong>IE をすべてデコード</strong>一覧で選んだ BSS の情報要素（IE）をすべて読み解き、対応機能や 11k/v/r も表示します。</li>
+        <li><strong>絞り込みと書き出し</strong><code>band:5 !sec:open, rssi&lt;-75</code> のような条件で絞り込めます。一覧は CSV、セッション全体は JSON に書き出せます。</li>
+      </ul>
+    </section>
+
+    <section class="section alt">
+      <div class="wrap">
+        <h2>現場で役立つ 3&nbsp;つの特徴</h2>
+        <div class="tiles">
+          <div class="tile">
+            <h3>AP&nbsp;ホスト名をそのまま表示</h3>
+            <p>AP がビーコンで通知しているホスト名を、一覧にそのまま表示します。BSSID を管理画面と突き合わせなくても、電波の弱い AP や調子の悪い AP がその場で分かります。多くの業務用 AP ベンダーの形式に対応しています。</p>
+            <p class="fine">AP&nbsp;ホスト名は、コントローラ側で通知を有効にしたときだけビーコンに載ります（Aruba の <code>advertise-ap-name</code> など）。</p>
+          </div>
+          <div class="tile">
+            <h3>計測は Probe&nbsp;にお任せ</h3>
+            <p>Raspberry&nbsp;Pi やミニ&nbsp;PC で <code>wifisight-cli serve</code> を動かすと、計測をそのデバイスに任せられます。離れた場所に置けば、そこの電波を LAN&nbsp;越しに監視できます。</p>
+            <p>手元に置く使い方もできます。Probe はどこにも接続しないので OS にスキャンを間引かれず、毎回同じ条件で計測できます。その間も PC はネットにつないだままです。</p>
+          </div>
+          <div class="tile">
+            <h3>どの OS でも同じ解析</h3>
+            <p>macOS、Windows、Linux で動きます。スキャン結果の解析は共通のコアで行うので、どの PC で測っても同じ電波なら同じ結果になります。</p>
+            <p class="fine">OS から取得できる項目には一部違いがあります（<a href="#os">OS ごとの違い</a>）。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrap">
+        <h2>調査</h2>
+        <p class="sub">フロアの図面を開き、今いる場所をクリックすると計測します。ヒートマップを描き、AP の位置も推定します。</p>
+      </div>
+      <figure class="shot"><img src="../img/survey.png" width="2880" height="1800" loading="lazy" alt="調査画面。会議場の図面に 40 か所の計測点、SSID TechConf の信号ヒートマップ、推定した AP の位置。" /></figure>
+      <ul class="facts wrap">
+        <li><strong>4&nbsp;種類のヒートマップ</strong>最も強い信号、ローミング先になる 2&nbsp;番目の AP、同一チャネルの AP 数、SNR を、SSID、AP、BSSID ごとに表示できます。</li>
+        <li><strong>1&nbsp;地点の計測回数を選べる</strong>最新のスキャンをすぐ記録するか、1、3、5&nbsp;回スキャンして平均するかを選べます。</li>
+        <li><strong>保存と書き出し</strong><code>.survey.json</code> に保存して後から開き直せます。報告用に PNG でも書き出せます。</li>
+      </ul>
+    </section>
+
+    <section class="section alt">
+      <div class="wrap">
+        <h2>チャネル使用率</h2>
+        <p class="sub">チャネルごとの混み具合を、各 AP が通知する BSS&nbsp;Load から集計して表示します。2.4、5、6 GHz の BSS は、実際のチャネル幅でスペクトラムにも描けます。</p>
+      </div>
+      <figure class="shot"><img src="../img/channels.png" width="2016" height="784" loading="lazy" alt="2.4、5、6 GHz のチャネル使用率の棒グラフと、チャネルごとの BSS 数。" /></figure>
+    </section>
+
+    <section class="section">
+      <div class="wrap">
+        <h2>信号強度の推移</h2>
+        <p class="sub">直近 1&nbsp;分から 1&nbsp;時間まで、すべての BSS の信号強度をグラフにします。一覧で選んだ BSS は太線で強調します。</p>
+      </div>
+      <figure class="shot"><img src="../img/signal.png" width="2016" height="784" loading="lazy" alt="直近 1 分の信号強度グラフ。選択中の TechConf を太線で強調。" /></figure>
+    </section>
+
+    <section class="section alt">
+      <div class="wrap">
+        <h2>ローミング</h2>
+        <p class="sub">接続中の AP を毎秒確認し、切り替わるたびに前後の RSSI と通信レートを記録します。スキャンを止めている間も確認は続きます。</p>
+      </div>
+      <figure class="shot narrow"><img src="../img/roaming.png" width="1640" height="496" loading="lazy" alt="ローミングログ。AP-HALL-A-01 から AP-HALL-A-02、AP-HALL-B-02 を経て AP-FOYER-01 まで 3 回のローミングと、前後の RSSI と通信レート。" /></figure>
+    </section>
+
+    <section class="section dark">
+      <div class="wrap">
+        <h2>コマンドライン</h2>
+        <p class="sub"><code>wifisight-cli</code> は、GUI と同じ解析結果を表、JSON、JSONL ログで出力します。外部 Probe もこれで動かします。Linux（x86_64、arm64）、macOS、Windows 用があります。</p>
+      </div>
+<pre><code><span class="p">$</span> wifisight-cli scan
+SSID                     BSSID             BAND   CH  CTR WIDTH RSSI SECURITY             PHY        MAXRATE  STA  UTIL  VENDOR / AP
+TechConf                 00:3a:99:10:00:00  2.4    1    1    20  -45 WPA2/WPA3-Personal   b/g/n/ax       287   12   41%  Cisco Systems, Inc / AP-HALL-A-01
+TechConf                 00:3a:99:10:00:0f    5   36   38    40  -50 WPA2/WPA3-Personal   a/n/ac/ax      574   10   18%  Cisco Systems, Inc / AP-HALL-A-01
+OpenRoaming              00:3a:99:10:00:0e    5   36   38    40  -53 WPA2/WPA3-Enterprise a/n/ac/ax      574    4   18%  Cisco Systems, Inc / AP-HALL-A-01
+TechConf-6G              00:3a:99:10:60:01    6   37   47   160  -54 WPA3-Personal        ax            2402    7    9%  Cisco Systems, Inc / AP-HALL-A-01
+TechConf                 00:3a:99:11:00:0f    5   44   46    40  -65 WPA2/WPA3-Personal   a/n/ac/ax      574   21   27%  Cisco Systems, Inc / AP-HALL-A-02
+HOTEL_GUEST              1c:b1:7f:30:00:03  2.4    1    1    20  -88 Open                 b/g/n          144             NEC Platforms, Ltd.
+
+<span class="p">$</span> wifisight-cli watch --interval 5 -o survey.jsonl   <span class="c"># スキャンごとに記録</span>
+<span class="p">$</span> wifisight-cli serve                               <span class="c"># 外部 Probe として :8737 で待ち受け</span></code></pre>
+    </section>
+
+    <section class="section" id="faq">
+      <div class="wrap">
+        <h2>よくある質問</h2>
+        <dl class="faq">
+          <dt>どんなツールですか？</dt>
+          <dd>WiFiSight は、Wi-Fi スキャナ（Wi-Fi アナライザー）と現場調査（サイトサーベイ）のヒートマップを 1 つにまとめた無料のツールです。周囲のアクセスポイントの一覧、IE のデコード、チャネル使用率、信号強度の推移、ローミングログを、macOS、Windows、Linux の同じ画面で確認できます。</dd>
+          <dt>無料で使えますか？</dt>
+          <dd>はい。すべての機能を無料で使えます。</dd>
+          <dt>AP ホスト名が表示されません。</dt>
+          <dd>AP ホスト名は、コントローラや AP 側で通知を有効にしたときだけビーコンに載ります。Aruba なら SSID ごとに <code>advertise-ap-name</code> を有効にしてください。</dd>
+          <dt>SSID や BSSID が表示されません。</dt>
+          <dd>macOS と Windows 11 24H2 以降では、位置情報の利用を許可する必要があります。macOS は初回起動時に許可を求められます。Windows は 設定 › プライバシーとセキュリティ › 位置情報 で「デスクトップ アプリに位置情報へのアクセスを許可する」をオンにしてください。</dd>
+        </dl>
+      </div>
+    </section>
+
+    <section class="section alt" id="install">
+      <div class="wrap">
+        <h2>ダウンロード</h2>
+        <p class="note" hidden>最新版 <span data-version></span></p>
+        <div class="tiles">
+          <div class="tile">
+            <h3>macOS</h3>
+            <p class="os">macOS 11 以降（Apple Silicon、Intel）</p>
+            <p class="get"><a class="btn" href="https://github.com/tsuyopon123/wifisight/releases/latest" data-asset="_universal.dmg">.dmg をダウンロード</a></p>
+            <p>アプリケーションフォルダにコピーして起動します。位置情報の利用を求められたら許可してください。許可しないと SSID と BSSID を取得できません。</p>
+          </div>
+          <div class="tile">
+            <h3>Windows</h3>
+            <p class="os">Windows 10/11（x64）</p>
+            <p class="get"><a class="btn" href="https://github.com/tsuyopon123/wifisight/releases/latest" data-asset="_x64-setup.exe">インストーラー</a><a class="btn alt" href="https://github.com/tsuyopon123/wifisight/releases/latest" data-asset="_x64-portable.exe">ポータブル版</a></p>
+            <p>ポータブル版はインストールせずに使えます。ただし WebView2 が必要です（Windows 11 には標準で入っています）。</p>
+          </div>
+          <div class="tile">
+            <h3>Linux</h3>
+            <p class="os">Debian / Ubuntu 系</p>
+            <p class="get"><a class="btn" href="https://github.com/tsuyopon123/wifisight/releases/latest" data-asset="_amd64.deb">.deb（x64）</a><a class="btn alt" href="https://github.com/tsuyopon123/wifisight/releases/latest" data-asset="_arm64.deb">.deb（arm64）</a></p>
+            <p><code>sudo apt install ./&lt;ファイル名&gt;.deb</code> でインストールします。</p>
+          </div>
+        </div>
+        <div class="links">
+          <a class="chev" href="https://github.com/tsuyopon123/wifisight/releases/latest">CLI と Probe 用パッケージ（Releases）</a>
+          <a class="chev" href="https://github.com/tsuyopon123/wifisight/blob/main/README.ja.md">README を読む</a>
+        </div>
+        <div class="firstrun">
+          <h3>初回起動</h3>
+          <p>コード署名をしていないため、初回起動時に警告が出ます。</p>
+          <ul>
+            <li><strong>macOS</strong>：起動できないときは、システム設定 › プライバシーとセキュリティ で「このまま開く」を押してください。</li>
+            <li><strong>Windows</strong>：SmartScreen の画面で「詳細情報」を押し、「実行」を選びます。</li>
+          </ul>
+        </div>
+        <div class="firstrun" id="os">
+          <h3>OS ごとの違い</h3>
+          <p>OS から取得できる項目には違いがあります。</p>
+          <div class="spec">
+            <table>
+              <thead><tr><th scope="col">OS</th><th scope="col">ノイズ / SNR</th><th scope="col">送信レート</th><th scope="col">受信レート</th><th scope="col">MCS / NSS</th></tr></thead>
+              <tbody>
+                <tr><th scope="row">Linux</th><td>✓<sup>1</sup></td><td>✓</td><td>✓</td><td>✓</td></tr>
+                <tr><th scope="row">macOS</th><td>✓</td><td>✓</td><td>–</td><td>✓<sup>2</sup></td></tr>
+                <tr><th scope="row">Windows</th><td>–</td><td>✓</td><td>✓</td><td>–</td></tr>
+              </tbody>
+            </table>
+            <p class="fine">1. ドライバが対応している場合のみ。</p>
+            <p class="fine">2. 非公開 API から読み取っているため、今後の macOS で取得できなくなる可能性があります。</p>
+            <p class="fine">送信レート、受信レート、MCS / NSS は接続中のリンクの情報です。macOS と Windows 11 24H2 以降では、位置情報の利用を許可しないと BSSID を取得できず、接続中の AP を表示できません。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span>本ソフトウェアの利用は自己責任で行ってください。</span>
+      <a href="https://github.com/tsuyopon123/wifisight">GitHub</a>
+      <a href="../" hreflang="en" lang="en">English</a>
+    </div>
+  </footer>
+</body>
+</html>

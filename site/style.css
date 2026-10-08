@@ -1,0 +1,470 @@
+/* Light, centered, one feature per section. Tailwind default scale; accent = the app icon's blue. */
+:root {
+  --bg: #ffffff;
+  --band: #f5f5f7; /* alternate sections and tiles */
+  --ink: #1d1d1f;
+  --muted: #6e6e73;
+  --line: #d2d2d7;
+  --accent: #0071e3;
+  --btn: #0071e3; /* white on it: 4.7:1 in both themes */
+  --nav: rgb(255 255 255 / 0.8);
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #000000;
+    --band: #161617;
+    --ink: #f5f5f7;
+    --muted: #a1a1a6;
+    --line: #424245;
+    --accent: #2997ff;
+    --nav: rgb(22 22 23 / 0.8);
+    color-scheme: dark;
+  }
+}
+:root:lang(ja) {
+  --font: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Inter", "Noto Sans JP", system-ui, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html {
+  scroll-padding-top: 4rem;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 1.0625rem/1.6 var(--font);
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+:lang(ja) body {
+  line-height: 1.8;
+  line-break: strict; /* kinsoku: no 、。」ー at the start of a line */
+}
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+h1,
+h2,
+h3 {
+  margin: 0;
+  text-wrap: balance;
+  font-weight: 700;
+}
+:lang(ja) :is(h1, h2, h3, .sub, .note) {
+  word-break: auto-phrase; /* break between phrases, not mid-word */
+}
+:lang(ja) :is(h1, h2, h3) {
+  font-feature-settings: "palt"; /* tighten kana and punctuation… */
+  letter-spacing: 0.04em; /* …then open the whole line slightly, as Japanese headings are set */
+}
+p,
+li {
+  text-wrap: pretty;
+}
+code {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  white-space: nowrap; /* keep -portable.exe and flags in one piece */
+}
+pre code {
+  white-space: inherit;
+}
+.nowrap {
+  white-space: nowrap;
+}
+
+.wrap {
+  width: min(70rem, 100% - 2rem);
+  margin-inline: auto;
+}
+
+/* nav: thin, sticky, translucent */
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--nav);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+.top .wrap {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  height: 3rem;
+  font-size: 0.8125rem;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+.brand:hover {
+  text-decoration: none;
+}
+.brand img {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+.top nav {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+.top nav a {
+  color: var(--ink);
+  opacity: 0.8;
+  white-space: nowrap;
+}
+.top nav a[aria-current="true"] {
+  opacity: 1;
+  font-weight: 600;
+}
+.top nav .pill {
+  opacity: 1;
+  background: var(--btn);
+  color: #fff;
+  padding: 0.375rem 0.875rem;
+  border-radius: 999px;
+}
+
+/* sections */
+.section {
+  padding-block: 6rem 0;
+  text-align: center;
+  overflow: hidden;
+}
+.section.alt {
+  background: var(--band);
+}
+.section h2 {
+  font-size: clamp(2.25rem, 4vw + 1rem, 3.5rem);
+  line-height: 1.08;
+}
+:lang(ja) .section h2 {
+  font-size: clamp(1.875rem, 3vw + 1rem, 3rem);
+  line-height: 1.25;
+}
+.sub {
+  text-wrap: balance; /* centered leads: even lines, no lone last word */
+  margin: 1rem auto 0;
+  max-width: 40rem;
+  font-size: clamp(1.125rem, 0.5vw + 1rem, 1.3125rem);
+  color: var(--muted);
+}
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem 2rem;
+  margin-top: 1.75rem;
+  font-size: 1.0625rem;
+}
+.btn {
+  display: inline-block;
+  padding: 0.75rem 1.5rem;
+  border-radius: 999px;
+  background: var(--btn);
+  color: #fff;
+  font-weight: 500;
+}
+.btn:hover {
+  text-decoration: none;
+  filter: brightness(1.08);
+}
+.chev::after {
+  content: " ›";
+}
+
+/* screenshots */
+.shot {
+  margin: 3.5rem auto 0;
+  max-width: 64rem;
+  border-radius: 1.25rem;
+  overflow: hidden;
+  background: #0b1220;
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25); /* shadow-2xl */
+}
+.shot.narrow {
+  max-width: 52rem;
+}
+.section > :last-child {
+  margin-bottom: 6rem;
+}
+
+/* hero */
+.hero {
+  padding-top: 5rem;
+}
+.hero .name {
+  font-size: 1.3125rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+}
+.hero h1 {
+  font-size: clamp(3rem, 7vw + 1rem, 6rem);
+  line-height: 1.02;
+}
+:lang(ja) .hero h1 {
+  font-size: clamp(2.25rem, 5vw + 1rem, 4.5rem);
+  line-height: 1.2;
+}
+.hero .sub {
+  font-size: clamp(1.1875rem, 0.8vw + 1rem, 1.5rem);
+}
+.hero .note {
+  margin: 1rem 0 0;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+/* tiles: highlights and install */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 1.25rem;
+  margin-top: 3.5rem;
+  text-align: left;
+}
+.tile {
+  background: var(--bg);
+  border-radius: 1.75rem;
+  padding: 2rem;
+}
+.section:not(.alt) .tile {
+  background: var(--band);
+}
+.tile h3 {
+  font-size: 1.5rem;
+  line-height: 1.2;
+  margin-bottom: 0.75rem;
+}
+.tile p {
+  margin: 0 0 0.75rem;
+  color: var(--muted);
+}
+.tile p:last-child {
+  margin-bottom: 0;
+}
+.tile .fine {
+  font-size: 0.875rem;
+}
+.tile .os {
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
+}
+
+/* feature facts under a screenshot */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1.5rem 2.5rem;
+  margin: 3rem auto 0;
+  max-width: 64rem;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+.facts strong {
+  display: block;
+  color: var(--ink);
+  font-size: 1.0625rem;
+  margin-bottom: 0.25rem;
+}
+
+/* CLI: the one dark section */
+.section.dark {
+  background: #000;
+  color: #f5f5f7;
+  --ink: #f5f5f7;
+  --muted: #a1a1a6;
+  --accent: #2997ff;
+}
+pre {
+  margin: 3.5rem auto 0;
+  max-width: 64rem;
+  padding: 1.75rem;
+  border-radius: 1.25rem;
+  background: #1d1d1f;
+  color: #f5f5f7;
+  font: 400 0.8125rem/1.7 var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  overflow-x: auto;
+}
+pre .p {
+  color: #2997ff;
+}
+pre .c {
+  color: #86868b;
+}
+
+.firstrun {
+  max-width: 44rem;
+  margin: 3rem auto 0;
+  text-align: left;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+.firstrun h3 {
+  color: var(--ink);
+  font-size: 1.0625rem;
+  margin-bottom: 0.5rem;
+}
+.firstrun p {
+  margin: 0;
+}
+.firstrun ul {
+  padding-left: 1.25rem;
+  margin: 0.5rem 0 0;
+}
+.firstrun strong {
+  color: var(--ink);
+}
+
+footer {
+  background: var(--band);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+footer .wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  padding-block: 1.25rem 2rem;
+}
+
+@media (max-width: 40rem) {
+  .section {
+    padding-top: 4rem;
+  }
+  .section > :last-child {
+    margin-bottom: 4rem;
+  }
+  .shot,
+  pre {
+    margin-top: 2.5rem;
+    margin-inline: 1rem;
+    border-radius: 0.75rem;
+  }
+  pre {
+    padding: 1.25rem;
+  }
+  .tile {
+    padding: 1.5rem;
+    border-radius: 1.25rem;
+  }
+  .top .gh,
+  .top .pill {
+    display: none; /* the hero has the same Download button */
+  }
+}
+
+/* per-OS download buttons inside a tile */
+.tile .get {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0 1.25rem;
+}
+.tile .get .btn {
+  padding: 0.5rem 1.125rem;
+  font-size: 0.9375rem;
+}
+.btn.alt {
+  background: transparent;
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* small spec table under a screenshot */
+.spec {
+  max-width: 36rem;
+  margin: 3rem auto 0;
+  text-align: left;
+}
+.spec table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+}
+.spec caption {
+  text-align: left;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.spec th,
+.spec td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  text-align: center;
+}
+.spec th[scope="row"],
+.spec thead th:first-child {
+  text-align: left;
+}
+.spec td {
+  color: var(--muted);
+}
+.spec .fine {
+  margin: 0.75rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.firstrun .spec {
+  max-width: none;
+  margin-top: 1rem;
+}
+
+/* questions: a plain list, left-aligned for reading */
+.faq {
+  max-width: 44rem;
+  margin: 3rem auto 0;
+  text-align: left;
+}
+.faq dt {
+  font-weight: 600;
+  font-size: 1.125rem;
+  margin-top: 2rem;
+}
+.faq dt:first-child {
+  margin-top: 0;
+}
+.faq dd {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+}
