@@ -4,7 +4,7 @@ name: pages
 on:
   push:
     branches: [main]
-    paths: ["site/**", ".github/workflows/pages.yml"]
+    paths: ["site/**", "Cargo.lock", "about.hbs", "about.toml", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
@@ -25,6 +25,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/configure-pages@v6
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about
+      # regenerate from Cargo.lock so the site's notices never go stale
+      - run: cargo about generate about.hbs -o site/THIRD_PARTY_LICENSES.html
       - uses: actions/upload-pages-artifact@v5
         with:
           path: site
