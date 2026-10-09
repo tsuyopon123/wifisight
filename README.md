@@ -72,7 +72,7 @@ Download the file for your platform from [Releases](https://github.com/tsuyopon1
 
 The app is not code-signed, so you'll see a warning the first time.
 
-- **macOS**: copy the app from the `.dmg` to Applications and open it. If it's blocked, click "Open Anyway" in System Settings › Privacy & Security
+- **macOS**: copy the app from the `.dmg` to Applications and open it. If it's blocked, click "Open Anyway" in System Settings › Privacy & Security. Or install with Homebrew: `brew install --cask tsuyopon123/tap/wifisight`
 - **Windows**: on the SmartScreen dialog, click "More info", then "Run anyway"
 - **Linux**: install the `.deb` with `sudo apt install ./<file>.deb`
 
