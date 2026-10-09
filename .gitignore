@@ -6,3 +6,4 @@ src-tauri/gen/
 .DS_Store
 .claude/
 .impeccable/
+site/THIRD_PARTY_LICENSES.html
