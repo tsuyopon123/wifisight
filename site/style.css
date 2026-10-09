@@ -5,10 +5,10 @@
   --ink: #1d1d1f;
   --muted: #6e6e73;
   --line: #d2d2d7;
-  --accent: #0071e3;
+  --accent: #0066cc;
   --btn: #0071e3; /* white on it: 4.7:1 in both themes */
   --nav: rgb(255 255 255 / 0.8);
-  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", monospace;
   color-scheme: light;
 }
@@ -25,7 +25,7 @@
   }
 }
 :root:lang(ja) {
-  --font: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Inter", "Noto Sans JP", system-ui, sans-serif;
+  --font: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
 }
 
 *,
@@ -277,6 +277,9 @@ pre code {
 }
 .tile .fine {
   font-size: 0.875rem;
+}
+.fine a {
+  text-decoration: underline; /* a link inside text needs more than color */
 }
 .tile .os {
   font-size: 0.875rem;

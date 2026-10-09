@@ -24,9 +24,6 @@
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
   <link rel="icon" href="img/icon.svg" type="image/svg+xml" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" />
   <link rel="stylesheet" href="style.css" />
   <script src="download.js" defer></script>
   <script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "WiFiSight", "url": "https://wifisight.tsuyopon.dev/", "inLanguage": "en", "description": "Free Wi-Fi scanner and site survey tool that shows every AP by its hostname. Heatmaps, channel utilization, a roaming log, and a CLI, for macOS, Windows, and Linux.", "applicationCategory": "UtilitiesApplication", "operatingSystem": "macOS, Windows, Linux", "image": "https://wifisight.tsuyopon.dev/img/og.png", "downloadUrl": "https://github.com/tsuyopon123/wifisight/releases/latest", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}}</script>
@@ -57,7 +54,7 @@
         <p class="note">For macOS, Windows, and Linux. Free to use.</p>
       </div>
       <figure class="shot">
-        <img src="img/scanner.png" width="2880" height="1800" alt="WiFiSight's scanner: a list of nearby BSSes with AP hostnames such as AP-HALL-A-01, the 5 GHz spectrum below, and the selected BSS decoded on the right." />
+        <img src="img/scanner-1x.webp" srcset="img/scanner-1x.webp 1440w, img/scanner.webp 2880w" sizes="(min-width: 64rem) 64rem, 100vw" width="2880" height="1800" fetchpriority="high" alt="WiFiSight's scanner: a list of nearby BSSes with AP hostnames such as AP-HALL-A-01, the 5 GHz spectrum below, and the selected BSS decoded on the right." />
       </figure>
       <ul class="facts wrap">
         <li><strong>Every BSS around you</strong>SSID, BSSID, vendor, AP hostname, channel and width, RSSI, security, client count, channel utilization, and more, side by side.</li>
@@ -94,7 +91,7 @@
         <h2>Survey</h2>
         <p class="sub">Open the floor plan and click where you stand to take a measurement. WiFiSight paints the heatmap and estimates where each AP is.</p>
       </div>
-      <figure class="shot"><img src="img/survey.png" width="2880" height="1800" loading="lazy" alt="Survey mode: a convention center floor plan with 40 measured points, a signal heatmap for the TechConf SSID, and estimated AP positions." /></figure>
+      <figure class="shot"><img src="img/survey-1x.webp" srcset="img/survey-1x.webp 1440w, img/survey.webp 2880w" sizes="(min-width: 64rem) 64rem, 100vw" width="2880" height="1800" loading="lazy" alt="Survey mode: a convention center floor plan with 40 measured points, a signal heatmap for the TechConf SSID, and estimated AP positions." /></figure>
       <ul class="facts wrap">
         <li><strong>Four heatmaps</strong>Strongest signal, the second-best AP for roaming, co-channel APs, or SNR, per SSID, AP, or BSSID.</li>
         <li><strong>Choose scans per point</strong>Record the latest scan right away, or scan 1, 3, or 5 times and average them.</li>
@@ -107,7 +104,7 @@
         <h2>Channel utilization</h2>
         <p class="sub">How busy each channel is, from the BSS Load the APs report. The spectrum view draws every BSS at its real width on 2.4, 5, and 6 GHz.</p>
       </div>
-      <figure class="shot"><img src="img/channels.png" width="2016" height="784" loading="lazy" alt="Channel utilization bars for 2.4, 5, and 6 GHz, with the number of BSSes on each channel." /></figure>
+      <figure class="shot"><img src="img/channels-1x.webp" srcset="img/channels-1x.webp 1008w, img/channels.webp 2016w" sizes="(min-width: 64rem) 64rem, 100vw" width="2016" height="784" loading="lazy" alt="Channel utilization bars for 2.4, 5, and 6 GHz, with the number of BSSes on each channel." /></figure>
     </section>
 
     <section class="section">
@@ -115,7 +112,7 @@
         <h2>Signal history</h2>
         <p class="sub">Every BSS from the last minute to the last hour. Select one in the list to bring it out.</p>
       </div>
-      <figure class="shot"><img src="img/signal.png" width="2016" height="784" loading="lazy" alt="Signal history chart for the last minute with the selected TechConf BSS highlighted." /></figure>
+      <figure class="shot"><img src="img/signal-1x.webp" srcset="img/signal-1x.webp 1008w, img/signal.webp 2016w" sizes="(min-width: 64rem) 64rem, 100vw" width="2016" height="784" loading="lazy" alt="Signal history chart for the last minute with the selected TechConf BSS highlighted." /></figure>
     </section>
 
     <section class="section alt">
@@ -123,7 +120,7 @@
         <h2>Roaming</h2>
         <p class="sub">The connected AP is checked every second, even while scanning is paused. Each change is logged with RSSI and data rate before and after.</p>
       </div>
-      <figure class="shot narrow"><img src="img/roaming.png" width="1640" height="496" loading="lazy" alt="Roaming log: three roams from AP-HALL-A-01 through AP-HALL-A-02 and AP-HALL-B-02 to AP-FOYER-01, each with RSSI and data rate before and after." /></figure>
+      <figure class="shot narrow"><img src="img/roaming-1x.webp" srcset="img/roaming-1x.webp 820w, img/roaming.webp 1640w" sizes="(min-width: 52rem) 52rem, 100vw" width="1640" height="496" loading="lazy" alt="Roaming log: three roams from AP-HALL-A-01 through AP-HALL-A-02 and AP-HALL-B-02 to AP-FOYER-01, each with RSSI and data rate before and after." /></figure>
     </section>
 
     <section class="section dark">
