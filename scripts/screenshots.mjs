@@ -135,14 +135,18 @@ const h = await launch();
 const { base, send, ev, waitFor, click } = h;
 let failed = false;
 try {
-  // the whole window, or just the element `sel` (+ `pad` px around it)
+  // the whole window, or just the element `sel` (+ `pad` px around it).
+  // .webp names are written twice for srcset: name.webp at 2x and name-1x.webp at half size.
   const shot = async (name, sel, pad = 0) => {
     await sleep(400); // let charts settle
-    const clip = sel && (await ev(`(() => { const r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect();
-      return { x: r.left - ${pad}, y: r.top - ${pad}, width: r.width + ${2 * pad}, height: r.height + ${2 * pad}, scale: 1 }; })()`));
-    const { data } = await send("Page.captureScreenshot", { format: "png", ...(clip && { clip }) });
-    writeFileSync(new URL(name, OUT), Buffer.from(data, "base64"));
-    console.log(`wrote site/img/${name}`);
+    const clip = await ev(`(() => { const r = ${sel ? `document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect()` : "{ left: 0, top: 0, width: innerWidth, height: innerHeight }"};
+      return { x: r.left - ${pad}, y: r.top - ${pad}, width: r.width + ${2 * pad}, height: r.height + ${2 * pad}, scale: 1 }; })()`);
+    const webp = name.endsWith(".webp");
+    for (const [file, scale] of webp ? [[name, 1], [name.replace(".webp", "-1x.webp"), 0.5]] : [[name, 1]]) {
+      const { data } = await send("Page.captureScreenshot", { format: webp ? "webp" : "png", ...(webp && { quality: 82 }), clip: { ...clip, scale } });
+      writeFileSync(new URL(file, OUT), Buffer.from(data, "base64"));
+      console.log(`wrote site/img/${file}`);
+    }
   };
   const freshScan = async () => {
     const n = await ev("window.__mock.scans");
@@ -172,11 +176,11 @@ try {
   await ev(`window.__mock.delay = 150`);
   await ev(`document.querySelector('#bss-table tr[data-bssid="00:3a:99:10:00:0f"]').click()`);
   await ev(`document.querySelector('#tabs [data-tab="5"]').click()`);
-  await shot("scanner.png");
+  await shot("scanner.webp");
   await ev(`document.querySelector('#tabs [data-tab="load"]').click()`);
-  await shot("channels.png", "#bottom");
+  await shot("channels.webp", "#bottom");
   await ev(`document.querySelector('#tabs [data-tab="signal"]').click()`);
-  await shot("signal.png", "#bottom");
+  await shot("signal.webp", "#bottom");
 
   // roaming: walk from Hall A to Hall B and the foyer
   const roams = [
@@ -193,7 +197,7 @@ try {
   }
   await waitFor(`document.getElementById("st-roams").textContent === "3 roams"`, 5000);
   await ev(`document.getElementById("st-roams").click()`);
-  await shot("roaming.png", "#dlg-roams");
+  await shot("roaming.webp", "#dlg-roams");
   await ev(`document.getElementById("dlg-roams").close()`);
 
   await ev(`window.__mock.gain = 0`);
@@ -258,7 +262,7 @@ try {
   await ev(`(() => { const s = document.getElementById("sv-layer"); s.value = "ssid:TechConf"; s.dispatchEvent(new Event("change")); })()`);
   await ev(`document.getElementById("btn-run").click()`); // pause, so the status bar doesn't tick in the shot
   await waitFor(`document.getElementById("sv-toast").hidden`, 10000);
-  await shot("survey.png");
+  await shot("survey.webp");
 
   // link preview (og:image): logo and name only, so the card says what it is at any size
   await send("Emulation.setDeviceMetricsOverride", { width: 1200, height: 630, deviceScaleFactor: 2, mobile: false });

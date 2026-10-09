@@ -24,9 +24,6 @@
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
   <link rel="icon" href="../img/icon.svg" type="image/svg+xml" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&family=Noto+Sans+JP:wght@400;500;700&display=swap" />
   <link rel="stylesheet" href="../style.css" />
   <script src="../download.js" defer></script>
   <script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "WiFiSight", "url": "https://wifisight.tsuyopon.dev/ja/", "inLanguage": "ja", "description": "AP ホスト名がそのまま見える、無料の Wi-Fi スキャナ・現場調査（サイトサーベイ）ツール。ヒートマップ、チャネル使用率、ローミングログ、CLI。macOS、Windows、Linux に対応。", "applicationCategory": "UtilitiesApplication", "operatingSystem": "macOS, Windows, Linux", "image": "https://wifisight.tsuyopon.dev/img/og.png", "downloadUrl": "https://github.com/tsuyopon123/wifisight/releases/latest", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "JPY"}}</script>
@@ -57,7 +54,7 @@
         <p class="note">macOS、Windows、Linux に対応。無料で使えます。</p>
       </div>
       <figure class="shot">
-        <img src="../img/scanner.png" width="2880" height="1800" alt="WiFiSight のスキャナ画面。AP-HALL-A-01 などの AP ホスト名付きの BSS 一覧、下に 5 GHz のスペクトラム、右に選択した BSS のデコード結果。" />
+        <img src="../img/scanner-1x.webp" srcset="../img/scanner-1x.webp 1440w, ../img/scanner.webp 2880w" sizes="(min-width: 64rem) 64rem, 100vw" width="2880" height="1800" fetchpriority="high" alt="WiFiSight のスキャナ画面。AP-HALL-A-01 などの AP ホスト名付きの BSS 一覧、下に 5 GHz のスペクトラム、右に選択した BSS のデコード結果。" />
       </figure>
       <ul class="facts wrap">
         <li><strong>周囲の BSS を一覧に</strong>SSID、BSSID、ベンダー、AP&nbsp;ホスト名、チャネルと帯域幅、RSSI、セキュリティ、接続数、チャネル使用率などを並べて表示します。</li>
@@ -94,7 +91,7 @@
         <h2>調査</h2>
         <p class="sub">フロアの図面を開き、今いる場所をクリックすると計測します。ヒートマップを描き、AP の位置も推定します。</p>
       </div>
-      <figure class="shot"><img src="../img/survey.png" width="2880" height="1800" loading="lazy" alt="調査画面。会議場の図面に 40 か所の計測点、SSID TechConf の信号ヒートマップ、推定した AP の位置。" /></figure>
+      <figure class="shot"><img src="../img/survey-1x.webp" srcset="../img/survey-1x.webp 1440w, ../img/survey.webp 2880w" sizes="(min-width: 64rem) 64rem, 100vw" width="2880" height="1800" loading="lazy" alt="調査画面。会議場の図面に 40 か所の計測点、SSID TechConf の信号ヒートマップ、推定した AP の位置。" /></figure>
       <ul class="facts wrap">
         <li><strong>4&nbsp;種類のヒートマップ</strong>最も強い信号、ローミング先になる 2&nbsp;番目の AP、同一チャネルの AP 数、SNR を、SSID、AP、BSSID ごとに表示できます。</li>
         <li><strong>1&nbsp;地点の計測回数を選べる</strong>最新のスキャンをすぐ記録するか、1、3、5&nbsp;回スキャンして平均するかを選べます。</li>
@@ -107,7 +104,7 @@
         <h2>チャネル使用率</h2>
         <p class="sub">チャネルごとの混み具合を、各 AP が通知する BSS&nbsp;Load から集計して表示します。2.4、5、6 GHz の BSS は、実際のチャネル幅でスペクトラムにも描けます。</p>
       </div>
-      <figure class="shot"><img src="../img/channels.png" width="2016" height="784" loading="lazy" alt="2.4、5、6 GHz のチャネル使用率の棒グラフと、チャネルごとの BSS 数。" /></figure>
+      <figure class="shot"><img src="../img/channels-1x.webp" srcset="../img/channels-1x.webp 1008w, ../img/channels.webp 2016w" sizes="(min-width: 64rem) 64rem, 100vw" width="2016" height="784" loading="lazy" alt="2.4、5、6 GHz のチャネル使用率の棒グラフと、チャネルごとの BSS 数。" /></figure>
     </section>
 
     <section class="section">
@@ -115,7 +112,7 @@
         <h2>信号強度の推移</h2>
         <p class="sub">直近 1&nbsp;分から 1&nbsp;時間まで、すべての BSS の信号強度をグラフにします。一覧で選んだ BSS は太線で強調します。</p>
       </div>
-      <figure class="shot"><img src="../img/signal.png" width="2016" height="784" loading="lazy" alt="直近 1 分の信号強度グラフ。選択中の TechConf を太線で強調。" /></figure>
+      <figure class="shot"><img src="../img/signal-1x.webp" srcset="../img/signal-1x.webp 1008w, ../img/signal.webp 2016w" sizes="(min-width: 64rem) 64rem, 100vw" width="2016" height="784" loading="lazy" alt="直近 1 分の信号強度グラフ。選択中の TechConf を太線で強調。" /></figure>
     </section>
 
     <section class="section alt">
@@ -123,7 +120,7 @@
         <h2>ローミング</h2>
         <p class="sub">接続中の AP を毎秒確認し、切り替わるたびに前後の RSSI と通信レートを記録します。スキャンを止めている間も確認は続きます。</p>
       </div>
-      <figure class="shot narrow"><img src="../img/roaming.png" width="1640" height="496" loading="lazy" alt="ローミングログ。AP-HALL-A-01 から AP-HALL-A-02、AP-HALL-B-02 を経て AP-FOYER-01 まで 3 回のローミングと、前後の RSSI と通信レート。" /></figure>
+      <figure class="shot narrow"><img src="../img/roaming-1x.webp" srcset="../img/roaming-1x.webp 820w, ../img/roaming.webp 1640w" sizes="(min-width: 52rem) 52rem, 100vw" width="1640" height="496" loading="lazy" alt="ローミングログ。AP-HALL-A-01 から AP-HALL-A-02、AP-HALL-B-02 を経て AP-FOYER-01 まで 3 回のローミングと、前後の RSSI と通信レート。" /></figure>
     </section>
 
     <section class="section dark">
