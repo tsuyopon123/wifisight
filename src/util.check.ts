@@ -1,7 +1,7 @@
 // Run: node src/util.check.ts
 import assert from "node:assert/strict";
 import type { BssInfo, Track } from "./types";
-import { matchFilter, parseFilter } from "./util.ts";
+import { matchFilter, parseFilter, scansBetween } from "./util.ts";
 
 // parsing: OR groups, AND terms, quotes, empty groups, bare "!"
 assert.deepEqual(parseFilter(""), []);
@@ -60,5 +60,12 @@ assert.deepEqual(f("tostring>1"), []);
 assert.deepEqual(f('ssid:"free wi-fi"'), ["Free Wi-Fi"]);
 assert.deepEqual(f("ssid:free wi-fi"), []); // now two terms: ssid:free AND wi-fi
 assert.deepEqual(f('"free wi"'), ["Free Wi-Fi"]);
+
+// scansBetween: endpoints excluded
+assert.equal(scansBetween([], 0, 100), 0);
+assert.equal(scansBetween([10, 20, 30, 40], 10, 40), 2);
+assert.equal(scansBetween([10, 20, 30, 40], 10, 20), 0);
+assert.equal(scansBetween([10, 20, 30, 40], 0, 100), 4);
+assert.equal(scansBetween([10, 20, 30, 40], 50, 60), 0);
 
 console.log("util ok");

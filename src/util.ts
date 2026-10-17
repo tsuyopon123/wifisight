@@ -56,6 +56,20 @@ export function fmtAgo(ms: number): string {
   return `${m}m${String(s % 60).padStart(2, "0")}s`;
 }
 
+/** Number of scans strictly between a and b (scans sorted ascending). */
+export function scansBetween(scans: number[], a: number, b: number): number {
+  const lower = (x: number, strict: boolean) => {
+    let lo = 0, hi = scans.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (strict ? scans[mid] <= x : scans[mid] < x) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+  return Math.max(0, lower(b, false) - lower(a, true));
+}
+
 export function isDfs(b: BssInfo): boolean {
   if (b.band !== "5") return false;
   const lo = b.freqLowMhz, hi = b.freqHighMhz;

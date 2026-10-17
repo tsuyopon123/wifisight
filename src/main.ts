@@ -24,6 +24,7 @@ const state = {
   tracks: new Map<string, Track>(),
   latestScan: 0,
   scanCount: 0,
+  scanTimes: [] as number[], // every ingested scan, so the signal chart can tell "BSS missed" from "slow interval"
   lastInterface: "",
   connLabel: "",
   link: null as LinkInfo | null,
@@ -80,6 +81,8 @@ function ingest(s: Snapshot) {
   for (const t of state.tracks.values()) {
     while (t.history.length && t.history[0].t < cutoff) t.history.shift();
   }
+  state.scanTimes.push(ts);
+  while (state.scanTimes[0] < cutoff) state.scanTimes.shift();
   state.latestScan = ts;
   state.scanCount++;
   state.lastInterface = s.interface;
@@ -255,7 +258,7 @@ function setOn(b: Element, on: boolean) {
 }
 
 function renderChart() {
-  chart.draw(state.tab, visibleTracks(), state.table.selected, Date.now(), state.historyMs, state.latestScan);
+  chart.draw(state.tab, visibleTracks(), state.table.selected, Date.now(), state.historyMs, state.latestScan, state.scanTimes);
   $("history-field").style.visibility = state.tab === "signal" ? "visible" : "hidden";
 }
 
@@ -716,6 +719,7 @@ function clearSession() {
   state.tracks.clear();
   state.latestScan = 0;
   state.scanCount = 0;
+  state.scanTimes = [];
   state.table.selected = null;
   state.lastInterface = "";
   state.connLabel = "";
