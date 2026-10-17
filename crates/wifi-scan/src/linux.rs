@@ -37,8 +37,15 @@ const NL80211_ATTR_IFNAME: u16 = 4;
 const NL80211_ATTR_IFTYPE: u16 = 5;
 const NL80211_ATTR_MAC: u16 = 6;
 const NL80211_ATTR_STA_INFO: u16 = 21;
+const NL80211_ATTR_SCAN_SSIDS: u16 = 45;
 const NL80211_ATTR_BSS: u16 = 47;
 const NL80211_ATTR_SURVEY_INFO: u16 = 84;
+const NL80211_ATTR_SCAN_FLAGS: u16 = 158;
+const NL80211_SCAN_FLAG_COLOCATED_6GHZ: u32 = 1 << 14;
+const NL80211_ATTR_MEASUREMENT_DURATION: u16 = 235;
+const NL80211_ATTR_MEASUREMENT_DURATION_MANDATORY: u16 = 236;
+/// Per-channel scan dwell: just over one 100 TU beacon interval
+const SCAN_DWELL_TU: u16 = 110;
 const NL80211_IFTYPE_STATION: u32 = 2;
 const NL80211_BSS_BSSID: u16 = 1;
 const NL80211_BSS_FREQUENCY: u16 = 2;
@@ -332,15 +339,54 @@ impl Nl80211 {
         a
     }
 
+    /// `tuned` = 6 GHz options that older kernels / drivers may reject.
+    fn trigger_attrs(ifindex: u32, tuned: bool) -> Vec<u8> {
+        let mut a = Self::ifindex_attr(ifindex);
+        // One wildcard SSID = active scan (probe requests). Without it every channel is passive.
+        let mut ssids = Vec::new();
+        put_attr(&mut ssids, 1, &[]);
+        put_attr(&mut a, NL80211_ATTR_SCAN_SSIDS, &ssids);
+        if tuned {
+            // 6 GHz: only PSC channels + APs advertised in 2.4/5 GHz RNR, like `iw scan` does
+            // (rtw89: 8.0 s -> 6.0 s per scan, same 6 GHz results)
+            put_attr(
+                &mut a,
+                NL80211_ATTR_SCAN_FLAGS,
+                &NL80211_SCAN_FLAG_COLOCATED_6GHZ.to_ne_bytes(),
+            );
+            // Driver-default dwell can be shorter than one beacon interval (100 TU), so 6 GHz
+            // (passive / NO-IR) is often missed (rtw89: 6 GHz in 0 of 6 scans; with 110 TU, 6 of 6).
+            put_attr(
+                &mut a,
+                NL80211_ATTR_MEASUREMENT_DURATION,
+                &SCAN_DWELL_TU.to_ne_bytes(),
+            );
+            put_attr(&mut a, NL80211_ATTR_MEASUREMENT_DURATION_MANDATORY, &[]);
+        }
+        a
+    }
+
     fn trigger(&mut self, ifindex: u32) -> io::Result<()> {
-        self.sock
-            .request(
+        let mut req = |tuned| {
+            self.sock.request(
                 self.family,
                 NL80211_CMD_TRIGGER_SCAN,
                 false,
-                &Self::ifindex_attr(ifindex),
+                &Self::trigger_attrs(ifindex, tuned),
             )
-            .map(|_| ())
+        };
+        match req(true) {
+            // e.g. driver can't set the dwell time (no SET_SCAN_DWELL)
+            Err(e)
+                if matches!(
+                    e.raw_os_error(),
+                    Some(libc::EOPNOTSUPP) | Some(libc::EINVAL)
+                ) =>
+            {
+                req(false).map(|_| ())
+            }
+            r => r.map(|_| ()),
+        }
     }
 
     fn survey(&mut self, ifindex: u32) -> HashMap<u32, i32> {
