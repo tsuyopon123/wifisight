@@ -24,7 +24,7 @@ const state = {
   tracks: new Map<string, Track>(),
   latestScan: 0,
   scanCount: 0,
-  scanTimes: [] as number[], // every ingested scan, so the signal chart can tell "BSS missed" from "slow interval"
+  scanSeq: 0, // bumped per scan, failed scan and pause/resume, so the signal chart can tell "BSS missed" from "slow interval"
   lastInterface: "",
   connLabel: "",
   link: null as LinkInfo | null,
@@ -57,6 +57,7 @@ function visibleTracks(): Track[] {
 
 function ingest(s: Snapshot) {
   const ts = s.timestampMs;
+  state.scanSeq++;
   // MLO = the OS reports ≥2 connected BSSIDs of one AP MLD (Linux lists every link; macOS/Windows only one)
   const conn = s.bss.filter((b) => b.connected).sort((a, b) => a.freqMhz - b.freqMhz);
   const links = (b: (typeof conn)[0]) => (b.mld ? conn.filter((c) => c.mld === b.mld).length : 1);
@@ -74,15 +75,13 @@ function ingest(s: Snapshot) {
     t.lastSeen = ts;
     t.minRssi = Math.min(t.minRssi, b.rssiDbm);
     t.maxRssi = Math.max(t.maxRssi, b.rssiDbm);
-    t.history.push({ t: ts, rssi: b.rssiDbm });
+    t.history.push({ t: ts, rssi: b.rssiDbm, n: state.scanSeq });
   }
   // keep 60 min of history max
   const cutoff = ts - 3600000;
   for (const t of state.tracks.values()) {
     while (t.history.length && t.history[0].t < cutoff) t.history.shift();
   }
-  state.scanTimes.push(ts);
-  while (state.scanTimes[0] < cutoff) state.scanTimes.shift();
   state.latestScan = ts;
   state.scanCount++;
   state.lastInterface = s.interface;
@@ -258,7 +257,7 @@ function setOn(b: Element, on: boolean) {
 }
 
 function renderChart() {
-  chart.draw(state.tab, visibleTracks(), state.table.selected, Date.now(), state.historyMs, state.latestScan, state.scanTimes);
+  chart.draw(state.tab, visibleTracks(), state.table.selected, Date.now(), state.historyMs, state.latestScan);
   $("history-field").style.visibility = state.tab === "signal" ? "visible" : "hidden";
 }
 
@@ -275,6 +274,7 @@ async function scanOnce() {
     }
   } catch (e) {
     if (g === gen) {
+      state.scanSeq++;
       state.lastError = String(e);
       const x = explain(state.lastError);
       $("st-warn").textContent = x.title;
@@ -300,6 +300,7 @@ function dropScans() {
 
 function setRunning(on: boolean) {
   state.running = on;
+  state.scanSeq++;
   $("btn-run").textContent = on ? "Pause" : "Start";
   window.clearTimeout(timer);
   if (on) {
@@ -719,7 +720,6 @@ function clearSession() {
   state.tracks.clear();
   state.latestScan = 0;
   state.scanCount = 0;
-  state.scanTimes = [];
   state.table.selected = null;
   state.lastInterface = "";
   state.connLabel = "";

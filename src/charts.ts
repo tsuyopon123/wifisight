@@ -1,5 +1,5 @@
-import type { Band, Track } from "./types";
-import { scansBetween, ssidLabel, withAlpha } from "./util";
+import type { Band, Sample, Track } from "./types";
+import { ssidLabel, withAlpha } from "./util";
 
 export type Tab = "signal" | "2.4" | "5" | "6" | "load";
 
@@ -75,9 +75,9 @@ export class ChartView {
 
   constructor(private canvas: HTMLCanvasElement) {}
 
-  draw(tab: Tab, tracks: Track[], selected: string | null, now: number, windowMs: number, latestScan: number, scans: number[]) {
+  draw(tab: Tab, tracks: Track[], selected: string | null, now: number, windowMs: number, latestScan: number) {
     this.hits = [];
-    if (tab === "signal") this.signal(tracks, selected, now, windowMs, scans);
+    if (tab === "signal") this.signal(tracks, selected, now, windowMs);
     else if (tab === "load") this.load(tracks.filter((t) => t.lastSeen >= latestScan));
     else this.spectrum(tab, tracks.filter((t) => t.lastSeen >= latestScan), selected);
   }
@@ -96,7 +96,7 @@ export class ChartView {
     return best;
   }
 
-  private signal(tracks: Track[], selected: string | null, now: number, windowMs: number, scans: number[]) {
+  private signal(tracks: Track[], selected: string | null, now: number, windowMs: number) {
     const x = setup(this.canvas);
     const { c } = x;
     rssiAxis(x);
@@ -135,15 +135,15 @@ export class ChartView {
       c.lineWidth = isSel ? 3 : 1.6;
       c.lineJoin = "round";
       c.beginPath();
-      let prev: number | null = null;
-      // break the line where the BSS was missing from ≥2 scans in a row, whatever the interval. The
-      // 10 s floor keeps irregular scans (macOS answers most requests from its cache in ~50 ms, then
-      // a real scan takes seconds) from cutting every line.
+      let prev: Sample | null = null;
+      // break the line where the BSS missed ≥2 scans in a row (or scanning paused/failed), whatever
+      // the interval. The 10 s floor keeps irregular scans (macOS answers most requests from its
+      // cache in ~50 ms, then a real scan takes seconds) from cutting every line on a brief dropout.
       for (const s of pts) {
         const px = xOf(s.t), py = yOf(x, s.rssi);
-        if (prev === null || (s.t - prev > 10000 && scansBetween(scans, prev, s.t) >= 2)) c.moveTo(px, py);
+        if (prev === null || (s.t - prev.t > 10000 && s.n - prev.n >= 3)) c.moveTo(px, py);
         else c.lineTo(px, py);
-        prev = s.t;
+        prev = s;
       }
       c.stroke();
       // dots on the last sample
