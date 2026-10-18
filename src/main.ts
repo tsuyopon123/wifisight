@@ -24,6 +24,7 @@ const state = {
   tracks: new Map<string, Track>(),
   latestScan: 0,
   scanCount: 0,
+  scanSeq: 0, // bumped per scan, failed scan and pause/resume, so the signal chart can tell "BSS missed" from "slow interval"
   lastInterface: "",
   connLabel: "",
   link: null as LinkInfo | null,
@@ -56,6 +57,7 @@ function visibleTracks(): Track[] {
 
 function ingest(s: Snapshot) {
   const ts = s.timestampMs;
+  state.scanSeq++;
   // MLO = the OS reports ≥2 connected BSSIDs of one AP MLD (Linux lists every link; macOS/Windows only one)
   const conn = s.bss.filter((b) => b.connected).sort((a, b) => a.freqMhz - b.freqMhz);
   const links = (b: (typeof conn)[0]) => (b.mld ? conn.filter((c) => c.mld === b.mld).length : 1);
@@ -73,7 +75,7 @@ function ingest(s: Snapshot) {
     t.lastSeen = ts;
     t.minRssi = Math.min(t.minRssi, b.rssiDbm);
     t.maxRssi = Math.max(t.maxRssi, b.rssiDbm);
-    t.history.push({ t: ts, rssi: b.rssiDbm });
+    t.history.push({ t: ts, rssi: b.rssiDbm, n: state.scanSeq });
   }
   // keep 60 min of history max
   const cutoff = ts - 3600000;
@@ -272,6 +274,7 @@ async function scanOnce() {
     }
   } catch (e) {
     if (g === gen) {
+      state.scanSeq++;
       state.lastError = String(e);
       const x = explain(state.lastError);
       $("st-warn").textContent = x.title;
@@ -297,6 +300,7 @@ function dropScans() {
 
 function setRunning(on: boolean) {
   state.running = on;
+  state.scanSeq++;
   $("btn-run").textContent = on ? "Pause" : "Start";
   window.clearTimeout(timer);
   if (on) {

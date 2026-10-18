@@ -1,4 +1,4 @@
-import type { Band, Track } from "./types";
+import type { Band, Sample, Track } from "./types";
 import { ssidLabel, withAlpha } from "./util";
 
 export type Tab = "signal" | "2.4" | "5" | "6" | "load";
@@ -135,15 +135,15 @@ export class ChartView {
       c.lineWidth = isSel ? 3 : 1.6;
       c.lineJoin = "round";
       c.beginPath();
-      let prev: number | null = null;
-      // break the line on gaps (BSS not seen). The floor keeps irregular scans (macOS answers most
-      // requests from its cache in ~50 ms, then a real scan takes seconds) from cutting every line.
-      const gap = Math.max(3 * medianStep(pts), 10000);
+      let prev: Sample | null = null;
+      // break the line where the BSS missed ≥2 scans in a row (or scanning paused/failed), whatever
+      // the interval. The 10 s floor keeps irregular scans (macOS answers most requests from its
+      // cache in ~50 ms, then a real scan takes seconds) from cutting every line on a brief dropout.
       for (const s of pts) {
         const px = xOf(s.t), py = yOf(x, s.rssi);
-        if (prev === null || s.t - prev > gap) c.moveTo(px, py);
+        if (prev === null || (s.t - prev.t > 10000 && s.n - prev.n >= 3)) c.moveTo(px, py);
         else c.lineTo(px, py);
-        prev = s.t;
+        prev = s;
       }
       c.stroke();
       // dots on the last sample
@@ -323,14 +323,6 @@ export class ChartView {
       });
     });
   }
-}
-
-function medianStep(pts: { t: number }[]): number {
-  if (pts.length < 3) return 10000;
-  const d: number[] = [];
-  for (let i = 1; i < pts.length; i++) d.push(pts[i].t - pts[i - 1].t);
-  d.sort((a, b) => a - b);
-  return d[Math.floor(d.length / 2)];
 }
 
 function escapeHtml(s: string) {

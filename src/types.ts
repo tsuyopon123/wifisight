@@ -121,6 +121,8 @@ export interface PlatformInfo {
 export interface Sample {
   t: number;
   rssi: number;
+  /** state.scanSeq when taken; a jump of ≥3 means the BSS missed scans (or scanning stopped) */
+  n: number;
 }
 
 /** A BSS tracked across scans in this session. */
