@@ -37,8 +37,15 @@ const NL80211_ATTR_IFNAME: u16 = 4;
 const NL80211_ATTR_IFTYPE: u16 = 5;
 const NL80211_ATTR_MAC: u16 = 6;
 const NL80211_ATTR_STA_INFO: u16 = 21;
+const NL80211_ATTR_SCAN_SSIDS: u16 = 45;
 const NL80211_ATTR_BSS: u16 = 47;
 const NL80211_ATTR_SURVEY_INFO: u16 = 84;
+const NL80211_ATTR_SCAN_FLAGS: u16 = 158;
+const NL80211_SCAN_FLAG_COLOCATED_6GHZ: u32 = 1 << 14;
+const NL80211_ATTR_MEASUREMENT_DURATION: u16 = 235;
+const NL80211_ATTR_MEASUREMENT_DURATION_MANDATORY: u16 = 236;
+/// Per-channel scan dwell: just over one 100 TU beacon interval
+const SCAN_DWELL_TU: u16 = 110;
 const NL80211_IFTYPE_STATION: u32 = 2;
 const NL80211_BSS_BSSID: u16 = 1;
 const NL80211_BSS_FREQUENCY: u16 = 2;
@@ -332,15 +339,65 @@ impl Nl80211 {
         a
     }
 
-    fn trigger(&mut self, ifindex: u32) -> io::Result<()> {
-        self.sock
-            .request(
+    /// (wildcard SSID, COLOCATED_6GHZ, dwell) per attempt, dropping what older kernels /
+    /// drivers reject one step at a time. `trigger` returns the index that was accepted.
+    const TRIGGER_STAGES: [(bool, bool, bool); 4] = [
+        (true, true, true),
+        (true, true, false),   // no SET_SCAN_DWELL (many FullMAC drivers)
+        (true, false, false),  // kernel < 5.10: no COLOCATED_6GHZ
+        (false, false, false), // max_scan_ssids == 0: passive only
+    ];
+
+    fn trigger_attrs(ifindex: u32, (ssid, colocated, dwell): (bool, bool, bool)) -> Vec<u8> {
+        let mut a = Self::ifindex_attr(ifindex);
+        if ssid {
+            // One wildcard SSID = active scan (probe requests). Without it every channel is passive.
+            let mut ssids = Vec::new();
+            put_attr(&mut ssids, 1, &[]);
+            put_attr(&mut a, NL80211_ATTR_SCAN_SSIDS, &ssids);
+        }
+        if colocated {
+            // 6 GHz: only PSC channels + APs advertised in 2.4/5 GHz RNR, like `iw scan` does
+            // (rtw89: 8.0 s -> 6.0 s per scan, same 6 GHz results)
+            put_attr(
+                &mut a,
+                NL80211_ATTR_SCAN_FLAGS,
+                &NL80211_SCAN_FLAG_COLOCATED_6GHZ.to_ne_bytes(),
+            );
+        }
+        if dwell {
+            // Driver-default dwell can be shorter than one beacon interval (100 TU), so 6 GHz
+            // (passive / NO-IR) is often missed (rtw89: 6 GHz in 0 of 6 scans; with 110 TU, 6 of 6).
+            put_attr(
+                &mut a,
+                NL80211_ATTR_MEASUREMENT_DURATION,
+                &SCAN_DWELL_TU.to_ne_bytes(),
+            );
+            put_attr(&mut a, NL80211_ATTR_MEASUREMENT_DURATION_MANDATORY, &[]);
+        }
+        a
+    }
+
+    fn trigger(&mut self, ifindex: u32) -> io::Result<usize> {
+        let last = Self::TRIGGER_STAGES.len() - 1;
+        for (i, stage) in Self::TRIGGER_STAGES.into_iter().enumerate() {
+            let r = self.sock.request(
                 self.family,
                 NL80211_CMD_TRIGGER_SCAN,
                 false,
-                &Self::ifindex_attr(ifindex),
-            )
-            .map(|_| ())
+                &Self::trigger_attrs(ifindex, stage),
+            );
+            match r {
+                Err(e)
+                    if i < last
+                        && matches!(
+                            e.raw_os_error(),
+                            Some(libc::EOPNOTSUPP) | Some(libc::EINVAL)
+                        ) => {}
+                r => return r.map(|_| i),
+            }
+        }
+        unreachable!()
     }
 
     fn survey(&mut self, ifindex: u32) -> HashMap<u32, i32> {
@@ -571,7 +628,10 @@ pub fn scan(opts: &ScanOptions) -> Result<ScanOutput, ScanError> {
         });
         let mut triggered = true;
         match nl.trigger(ifindex) {
-            Ok(()) => {}
+            // stage 1 (no dwell setting) is common and usually harmless, so stay quiet about it
+            Ok(stage) if stage >= 2 => warnings
+                .push("Driver/kernel rejected 6 GHz scan options; 6 GHz BSSs may be missed".into()),
+            Ok(_) => {}
             Err(e) if e.raw_os_error() == Some(libc::EBUSY) => {}
             Err(e) if matches!(e.raw_os_error(), Some(libc::EPERM) | Some(libc::EACCES)) => {
                 // Unprivileged: ask NetworkManager (polkit allows this for local users)
@@ -624,6 +684,26 @@ mod tests {
         assert_eq!(a.len(), 2);
         assert_eq!(u32_of(get(&a, 3).unwrap()), Some(7));
         assert_eq!(get(&a, 4).unwrap(), b"wlan0\0");
+    }
+
+    #[test]
+    fn trigger_attrs_full() {
+        let b = Nl80211::trigger_attrs(3, Nl80211::TRIGGER_STAGES[0]);
+        let a = attrs(&b);
+        assert_eq!(u32_of(get(&a, NL80211_ATTR_IFINDEX).unwrap()), Some(3));
+        let ssids = attrs(get(&a, NL80211_ATTR_SCAN_SSIDS).unwrap());
+        assert_eq!(ssids, vec![(1, &[][..])]);
+        assert_eq!(
+            u32_of(get(&a, NL80211_ATTR_SCAN_FLAGS).unwrap()),
+            Some(1 << 14)
+        );
+        assert_eq!(
+            u16_of(get(&a, NL80211_ATTR_MEASUREMENT_DURATION).unwrap()),
+            Some(110)
+        );
+        assert!(get(&a, NL80211_ATTR_MEASUREMENT_DURATION_MANDATORY).is_some());
+        let bare = Nl80211::trigger_attrs(3, *Nl80211::TRIGGER_STAGES.last().unwrap());
+        assert_eq!(attrs(&bare).len(), 1);
     }
 
     #[test]
