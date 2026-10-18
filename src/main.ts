@@ -45,8 +45,8 @@ let linkBusy = false;
 let linkGen = 0; // bumped when the interface / probe changes, so the switch isn't logged as a roam
 let linkKnown = false; // the first answer after a reset only sets the baseline
 
-function passesFilters(t: Track): boolean {
-  return state.bands.has(t.info.band) && (state.showHidden || !t.info.hidden) && matchFilter(t, state.filter);
+function passesFilters(t: Track, bands = true): boolean {
+  return (!bands || state.bands.has(t.info.band)) && (state.showHidden || !t.info.hidden) && matchFilter(t, state.filter);
 }
 
 function visibleTracks(): Track[] {
@@ -839,7 +839,8 @@ async function init() {
   probeInput.value = state.probe ?? "";
   await loadInterfaces();
   await survey.init({
-    visible: (b) => passesFilters({ info: b } as Track),
+    // Survey picks its band in its own sidebar (the toolbar toggles are hidden there)
+    visible: (b) => passesFilters({ info: b } as Track, false),
     ensureRunning: () => {
       const inFlight = scanning; // a scan started before the click doesn't belong to the new spot
       if (!state.running) setRunning(true);

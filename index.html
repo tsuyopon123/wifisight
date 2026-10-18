@@ -23,7 +23,7 @@
             <option value="30000">30 s</option>
           </select>
         </label>
-        <div class="seg" id="band-filter" role="group" aria-label="Band filter">
+        <div class="seg scanner-only" id="band-filter" role="group" aria-label="Band filter">
           <button data-band="2.4" class="on" aria-pressed="true">2.4</button>
           <button data-band="5" class="on" aria-pressed="true">5</button>
           <button data-band="6" class="on" aria-pressed="true">6</button>
@@ -130,35 +130,47 @@
           <label class="check"><input type="checkbox" id="sv-beep" /> Beep when a point is done</label>
         </section>
         <section class="sv-sec">
-          <h4 class="sv-h">Points <span id="sv-points-n" class="sv-n"></span></h4>
-          <ol id="sv-points"></ol>
-        </section>
-        <section class="sv-sec">
           <h4>Heatmap</h4>
-          <label class="sv-row"><span>Layer</span><select id="sv-layer"></select></label>
-          <label class="sv-row"><span>Metric</span>
+          <label class="sv-row"><span>Show</span>
             <select id="sv-metric">
-              <option value="signal">Signal (strongest)</option>
-              <option value="second">2nd AP signal (roaming)</option>
+              <option value="signal">Signal strength</option>
+              <option value="second">Roaming: 2nd-best AP</option>
               <option value="cci">Co-channel APs (≥ −82 dBm)</option>
               <option value="snr">SNR (where noise is reported)</option>
+              <option value="channel">Strongest channel</option>
             </select>
           </label>
-          <label class="sv-row"><span>Opacity</span><input type="range" id="sv-opacity" min="10" max="90" /></label>
-          <label class="sv-row" title="How far from the nearest measured point the heatmap is painted"><span>Paint radius</span><span class="sv-ctl"><input type="range" id="sv-mask" min="3" max="50" /><span id="sv-mask-v" class="sv-val"></span></span></label>
+          <label class="sv-row"><span>SSID</span><select id="sv-ssid"></select></label>
+          <div class="sv-row"><span>Band</span>
+            <div class="seg" id="sv-band" role="group" aria-label="Band">
+              <button data-band="" title="All bands">All</button>
+              <button data-band="2.4">2.4</button>
+              <button data-band="5">5</button>
+              <button data-band="6">6</button>
+            </div>
+          </div>
+          <p class="sv-hint" id="sv-band-hint" hidden>Channels are compared within one band.</p>
         </section>
         <section class="sv-sec">
           <h4 class="sv-h">Access points <span id="sv-aps-n" class="sv-n"></span><span class="spacer"></span><button id="sv-ap-cols" title="Show / hide columns (or right-click a header)">Columns ▾</button></h4>
-          <p class="sv-hint">✕ estimated, ◆ placed — drag a marker on the map to place it. Pick an AP to see its BSSIDs under Layer.</p>
+          <p class="sv-hint">Click an AP to show only it on the map. ✕ estimated position, ◆ placed — drag a marker to place it.</p>
+          <p class="sv-focus" id="sv-ap-focus" hidden></p>
+          <label class="sv-row" id="sv-bssid-row" hidden><span>BSSID</span><select id="sv-bssid"></select></label>
           <table id="sv-aps"></table>
           <div class="menu-pop" id="sv-col-pop" hidden></div>
         </section>
+        <section class="sv-sec">
+          <h4 class="sv-h">Points <span id="sv-points-n" class="sv-n"></span></h4>
+          <ol id="sv-points"></ol>
+        </section>
         <details class="sv-sec" id="sv-plan-sec">
-          <summary><h4>Floor plan</h4></summary>
+          <summary><h4>Display</h4></summary>
+          <label class="sv-row"><span>Heatmap opacity</span><input type="range" id="sv-opacity" min="10" max="90" /></label>
+          <label class="sv-row" title="How far from the nearest measured point the heatmap is painted"><span>Paint radius</span><span class="sv-ctl"><input type="range" id="sv-mask" min="3" max="50" /><span id="sv-mask-v" class="sv-val"></span></span></label>
           <div class="sv-row"><span>Plan lines</span>
             <span class="sv-ctl"><small>darker</small><input type="range" id="sv-tone" min="-100" max="100" aria-label="Plan lines: darker or fainter" title="Darken the plan's lines or fade them toward white (double-click to reset)" /><small>fainter</small></span>
           </div>
-          <label class="check"><input type="checkbox" id="sv-gray" /> Black &amp; white</label>
+          <label class="check"><input type="checkbox" id="sv-gray" /> Black &amp; white plan</label>
           <div class="sv-row"><span>Scale</span><span class="sv-ctl"><span id="sv-scale-text" class="sv-val"></span><span class="spacer"></span><button id="sv-scale-set">Set…</button></span></div>
           <div id="sv-scale-input" class="sv-row" hidden>
             <label for="sv-scale-m">Distance</label>

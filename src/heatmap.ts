@@ -23,9 +23,8 @@ export function apKey(bssid: string, apName: string | null): string {
 
 /** Strongest RSSI among `bssids` at one point, or FLOOR_DBM if none were heard. */
 export function layerValue(rssi: Record<string, number>, bssids: Iterable<string>): number {
-  let v = FLOOR_DBM;
-  for (const b of bssids) if (rssi[b] != null && rssi[b] > v) v = rssi[b];
-  return v;
+  const b = strongest(rssi, bssids);
+  return b == null ? FLOOR_DBM : Math.max(FLOOR_DBM, rssi[b]);
 }
 
 /**
@@ -55,6 +54,34 @@ export function idwGrid(samples: Sample[], cols: number, rows: number, cell: num
     }
   }
   return out;
+}
+
+/** Value of the nearest sample per cell (for categorical values, e.g. channels). `NaN` farther than `maxDist`. */
+export function nearestGrid(samples: Sample[], cols: number, rows: number, cell: number, maxDist: number): Float32Array {
+  const out = new Float32Array(cols * rows).fill(NaN);
+  const max2 = maxDist * maxDist;
+  for (let j = 0; j < rows; j++) {
+    const y = (j + 0.5) * cell;
+    for (let i = 0; i < cols; i++) {
+      const x = (i + 0.5) * cell;
+      let near = max2;
+      for (const s of samples) {
+        const d2 = (s.x - x) ** 2 + (s.y - y) ** 2;
+        if (d2 <= near) {
+          near = d2;
+          out[j * cols + i] = s.v;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/** BSSID with the strongest RSSI among `bssids`, or null if none were heard. */
+export function strongest(rssi: Record<string, number>, bssids: Iterable<string>): string | null {
+  let top: string | null = null;
+  for (const b of bssids) if (rssi[b] != null && (top == null || rssi[b] > rssi[top])) top = b;
+  return top;
 }
 
 /** Estimated transmitter position: centroid of the 3 strongest samples, weighted in mW. */

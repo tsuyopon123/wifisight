@@ -837,6 +837,25 @@ button:disabled {
 #sv-side select {
   min-width: 0;
 }
+/* the map is narrowed to one AP: say so where the list is, with the way back */
+.sv-focus {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 4px 8px;
+  border-radius: 6px;
+  background: var(--sel);
+  font-size: 12px;
+}
+.sv-focus button {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 1px 6px;
+}
+#sv-band button {
+  flex: 1;
+}
 .sv-h {
   display: flex;
   align-items: center;
@@ -894,9 +913,6 @@ button:disabled {
   min-height: 24px;
   padding: 0 4px;
 }
-#sv-aps th:first-child {
-  width: 44%;
-}
 #sv-side input[type="range"] {
   flex: 1;
   min-width: 0;
@@ -919,11 +935,11 @@ button:disabled {
 #sv-aps th {
   padding: 2px 4px;
 }
-#sv-aps tr[data-layer],
+#sv-aps tr[data-ap],
 #sv-points li {
   cursor: pointer;
 }
-#sv-aps tr[data-layer]:hover,
+#sv-aps tr[data-ap]:hover,
 #sv-points li:hover {
   background: var(--hover);
 }

@@ -259,7 +259,7 @@ try {
       await waitFor(`JSON.parse(window.__mock.autosave).points.filter((p) => p.scans > 0).length > ${n}`, 10000);
     }
   }
-  await ev(`(() => { const s = document.getElementById("sv-layer"); s.value = "ssid:TechConf"; s.dispatchEvent(new Event("change")); })()`);
+  await ev(`(() => { const s = document.getElementById("sv-ssid"); s.value = "TechConf"; s.dispatchEvent(new Event("change")); })()`);
   await ev(`document.getElementById("btn-run").click()`); // pause, so the status bar doesn't tick in the shot
   await waitFor(`document.getElementById("sv-toast").hidden`, 10000);
   await shot("survey.webp");
