@@ -9,13 +9,15 @@ import {
   idwGrid,
   layerValue,
   median,
+  nearestGrid,
   niceLength,
   secondBest,
   snrAt,
+  strongest,
   type Radio,
   type Sample,
 } from "./heatmap";
-import type { BssInfo, Snapshot } from "./types";
+import type { Band, BssInfo, Snapshot } from "./types";
 import { colorFor, esc, keepFocus, signalColor, ssidLabel } from "./util";
 
 interface SurveyPoint {
@@ -86,7 +88,8 @@ const AP_COLS: { key: string; label: string; num?: boolean; title?: string; sort
   { key: "pos", label: "Pos", title: "◆ placed / ✕ estimated", sort: (g) => (project?.apPos?.[g.key] ? 1 : 0), html: (g) => (project?.apPos?.[g.key] ? "◆" : "✕") },
 ];
 const AP_VIEW_KEY = "wifisight.svAps";
-let apView: { hidden: string[]; sort: string; asc: boolean } = { hidden: ["vendor", "band", "width", "bss", "pos"], sort: "best", asc: false };
+// SSID is picked above the list, so its column starts hidden
+let apView: { hidden: string[]; sort: string; asc: boolean } = { hidden: ["ssid", "vendor", "band", "width", "bss", "pos"], sort: "best", asc: false };
 
 function saveApView() {
   try {
@@ -96,7 +99,7 @@ function saveApView() {
   }
 }
 
-type Metric = "signal" | "second" | "snr" | "cci";
+type Metric = "signal" | "second" | "snr" | "cci" | "channel";
 
 // steps = class boundaries good → bad; `higher` = bigger is better
 const METRICS: Record<Metric, { label: string; unit: string; steps: number[]; higher: boolean; dbm: boolean; legend: string[] }> = {
@@ -104,6 +107,8 @@ const METRICS: Record<Metric, { label: string; unit: string; steps: number[]; hi
   second: { label: "2nd AP signal", unit: "dBm", steps: [-60, -67, -75, -82], higher: true, dbm: true, legend: ["≥-60", "≥-67", "≥-75", "≥-82", "<-82"] },
   snr: { label: "SNR", unit: "dB", steps: [25, 20, 15, 10], higher: true, dbm: false, legend: ["≥25", "≥20", "≥15", "≥10", "<10"] },
   cci: { label: "Co-channel APs", unit: "APs", steps: [0.5, 1.5, 2.5, 3.5], higher: false, dbm: false, legend: ["0", "1", "2", "3", "4+"] },
+  // categorical: value = primary channel frequency (MHz, unique across bands), one colour per channel
+  channel: { label: "Strongest channel", unit: "", steps: [], higher: true, dbm: false, legend: [] },
 };
 const CLASS_VARS = ["--good", "--ok", "--fair", "--poor", "--bad"];
 
@@ -129,8 +134,9 @@ const EXPORT_MAX = 4000;
 let host: SurveyHost;
 let project: SurveyProject | null = null;
 let img: HTMLImageElement | null = null;
-let layer = "best";
 let metric: Metric = "signal";
+// what the map and the AP list show: SSID and band narrow both; an AP (and one of its BSSIDs) narrows the map
+let sel: { ssid: string | null; band: Band | null; ap: string | null; bssid: string | null } = { ssid: null, band: null, ap: null, bssid: null };
 let selectedPoint: string | null = null;
 let scansPerPoint = 1;
 let instant = true; // record the latest scan right away instead of waiting for new ones
@@ -183,24 +189,47 @@ function visibleBssids(): string[] {
     .map((b) => b.bssid);
 }
 
+/** BSSIDs passing the SSID / band picks: what the AP list shows. */
+function scopeBssids(): string[] {
+  const bss = project?.bss ?? {};
+  return visibleBssids().filter((b) => (sel.ssid == null || ssidLabel(bss[b]) === sel.ssid) && (sel.band == null || bss[b].band === sel.band));
+}
+
+/** BSSIDs the map is drawn from: the scope, narrowed to the picked AP / BSSID. */
 function layerBssids(): string[] {
-  const vis = visibleBssids();
-  if (!project || layer === "best") return vis;
-  const [kind, ...rest] = layer.split(":");
-  const v = rest.join(":");
-  const bss = project.bss;
-  if (kind === "ssid") return vis.filter((b) => ssidLabel(bss[b]) === v);
-  if (kind === "bssid") return vis.filter((b) => b === v);
-  return vis.filter((b) => apKey(b, bss[b].apName) === v); // "ap:<key>"
+  const bss = project?.bss ?? {};
+  return scopeBssids().filter((b) => (sel.ap == null || apKey(b, bss[b].apName) === sel.ap) && (sel.bssid == null || b === sel.bssid));
+}
+
+function apLabel(key: string): string {
+  const b = Object.values(project?.bss ?? {}).find((x) => apKey(x.bssid, x.apName) === key);
+  return b ? (b.apName ?? b.bssid.slice(0, 16) + "x") : key;
+}
+
+/** Bands with a button (no "other") that carry the current SSID pick, most BSSIDs first. */
+function bandsInScope(): Band[] {
+  const bss = project?.bss ?? {};
+  const n = new Map<Band, number>();
+  for (const b of visibleBssids()) if (sel.ssid == null || ssidLabel(bss[b]) === sel.ssid) n.set(bss[b].band, (n.get(bss[b].band) ?? 0) + 1);
+  const pref: Band[] = ["5", "6", "2.4"]; // tie: the band clients usually end up on
+  return pref.filter((b) => n.has(b)).sort((a, b) => n.get(b)! - n.get(a)! || pref.indexOf(a) - pref.indexOf(b));
+}
+
+/**
+ * Keep the picks consistent with each other and with the toolbar filter (run before every render):
+ * the channel map always has a band, and a focused AP / BSSID that the picks no longer cover is dropped.
+ */
+function normalizeSel() {
+  if (metric === "channel" && (sel.band == null || sel.band === "other")) sel.band = bandsInScope()[0] ?? "5";
+  const bss = project?.bss ?? {};
+  const scope = scopeBssids();
+  if (sel.ap != null && !scope.some((b) => apKey(b, bss[b].apName) === sel.ap)) sel.ap = null;
+  if (sel.bssid != null && (sel.ap == null || !scope.includes(sel.bssid))) sel.bssid = null;
 }
 
 function layerLabel(): string {
-  if (!project || layer === "best") return "all visible";
-  const [kind, ...rest] = layer.split(":");
-  const v = rest.join(":");
-  if (kind !== "ap") return `${kind.toUpperCase()} ${v}`;
-  const b = Object.values(project.bss).find((x) => apKey(x.bssid, x.apName) === v);
-  return `AP ${b?.apName ?? v}`;
+  const parts = [sel.ssid ?? "all SSIDs", sel.band && `${sel.band} GHz`, sel.ap && `AP ${apLabel(sel.ap)}`, sel.bssid];
+  return parts.filter(Boolean).join(" · ");
 }
 
 function samplesFor(bssids: string[]): Sample[] {
@@ -216,6 +245,11 @@ function pointValue(p: SurveyPoint, bssids: string[], radios: Record<string, Rad
   if (metric === "signal") return layerValue(p.rssi, bssids);
   if (metric === "second") return secondBest(p.rssi, bssids, (b) => apKey(b, bss[b].apName));
   if (metric === "snr") return snrAt(p.rssi, p.noise, bssids);
+  if (metric === "channel") {
+    // same cut-off as the signal map: a channel heard below it is not coverage
+    const top = strongest(p.rssi, bssids);
+    return top && p.rssi[top] >= NO_COVERAGE_DBM ? bss[top].freqMhz : null;
+  }
   return coChannel(p.rssi, bssids, radios, CCI_DBM);
 }
 
@@ -224,6 +258,32 @@ function radiosOf(): Record<string, Radio> {
 }
 
 const noData = (v: number | null): v is null => v == null || (METRICS[metric].dbm && v <= FLOOR_DBM);
+
+/** Any BSS on the primary channel at `mhz`. */
+const onFreq = (mhz: number) => Object.values(project?.bss ?? {}).find((b) => b.freqMhz === mhz);
+
+/** Point value as shown on the map / in the list. */
+function fmt(v: number): string {
+  return metric === "channel" ? String(onFreq(v)?.channel ?? v) : String(Math.round(v));
+}
+
+/** Colour of one value: its class for graded metrics, its own hue per channel for "channel". */
+function valueColor(v: number): string {
+  if (metric !== "channel") return classColor(classOf(v));
+  // hues spread by the golden angle over every channel in the survey, so a channel keeps its colour across layers
+  return `hsl(${(Math.max(0, surveyFreqs().indexOf(v)) * 137.508) % 360} 75% 50%)`;
+}
+
+// BSSs are only ever added to a survey (until another one is loaded), so the count tells when to rebuild
+let freqCache: { p: SurveyProject | null; n: number; list: number[] } = { p: null, n: -1, list: [] };
+
+/** Every primary-channel frequency in the survey, ascending. */
+function surveyFreqs(): number[] {
+  const all = Object.values(project?.bss ?? {});
+  if (freqCache.p !== project || freqCache.n !== all.length)
+    freqCache = { p: project, n: all.length, list: [...new Set(all.map((b) => b.freqMhz))].sort((a, b) => a - b) };
+  return freqCache.list;
+}
 
 function apGroups(bssids: string[]): ApGroup[] {
   if (!project) return [];
@@ -316,7 +376,7 @@ function loadProject(p: SurveyProject) {
   hideToast();
   selectedPoint = null;
   calib = null;
-  layer = "best";
+  sel = { ssid: null, band: null, ap: null, bssid: null };
   zoom = 1;
   pan = { x: 0, y: 0 };
   heat = null;
@@ -470,8 +530,14 @@ function deletePoint(id: string) {
 
 // ───────────────────────── drawing ─────────────────────────
 
-function rgb(hex: string): [number, number, number] {
-  const h = hex.replace("#", "");
+let colorCtx: CanvasRenderingContext2D | null = null;
+
+function rgb(color: string): [number, number, number] {
+  // any CSS colour → #rrggbb via the canvas parser
+  colorCtx ??= document.createElement("canvas").getContext("2d")!;
+  colorCtx.fillStyle = "#000";
+  colorCtx.fillStyle = color;
+  const h = String(colorCtx.fillStyle).replace("#", "");
   const n = parseInt(h.length === 3 ? [...h].map((c) => c + c).join("") : h, 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
@@ -491,6 +557,7 @@ function classColor(i: number | string): string {
 
 export function render() {
   if (!active) return;
+  normalizeSel();
   renderSide();
   renderStatus();
   draw();
@@ -539,27 +606,34 @@ function heatmap(samples: Sample[], w: number, h: number): HTMLCanvasElement | n
   const mask = project?.maskFrac ?? DEFAULT_MASK;
   const cols = Math.ceil(w / CELL_PX),
     rows = Math.ceil(h / CELL_PX);
-  const key = `${metric}|${mask}|${cols}x${rows}|${samples.map((s) => `${s.x},${s.y},${s.v}`).join(";")}`;
+  // channel hues depend on every frequency in the survey (see valueColor)
+  const hues = metric === "channel" ? surveyFreqs().join(",") : "";
+  const key = `${metric}|${mask}|${hues}|${cols}x${rows}|${samples.map((s) => `${s.x},${s.y},${s.v}`).join(";")}`;
   if (heat?.key === key) return heat.canvas;
   const px = samples.map((s) => ({ v: s.v, x: s.x * w, y: s.y * h }));
-  const grid = idwGrid(px, cols, rows, CELL_PX, Math.hypot(w, h) * mask);
+  // averaging channel numbers means nothing: categorical metrics take the nearest point
+  const grid = (metric === "channel" ? nearestGrid : idwGrid)(px, cols, rows, CELL_PX, Math.hypot(w, h) * mask);
   const off = document.createElement("canvas");
   off.width = cols;
   off.height = rows;
   const octx = off.getContext("2d")!;
   const data = octx.createImageData(cols, rows);
-  const colors = CLASS_VARS.map((_, i) => rgb(classColor(i)));
+  const colors = new Map<number, [number, number, number]>();
   for (let i = 0; i < grid.length; i++) {
     const v = grid[i];
     if (Number.isNaN(v) || (m.dbm && v < NO_COVERAGE_DBM)) continue;
-    data.data.set([...colors[classOf(v)], 255], i * 4);
+    const c = metric === "channel" ? v : classOf(v);
+    if (!colors.has(c)) colors.set(c, rgb(valueColor(v)));
+    data.data.set([...colors.get(c)!, 255], i * 4);
   }
   octx.putImageData(data, 0, 0);
   const out = document.createElement("canvas");
   out.width = cols * CELL_PX;
   out.height = rows * CELL_PX;
   const hctx = out.getContext("2d")!;
-  hctx.filter = `blur(${CELL_PX}px)`;
+  // blurring channel colours would invent in-between hues that read as other channels
+  if (metric === "channel") hctx.imageSmoothingEnabled = false;
+  else hctx.filter = `blur(${CELL_PX}px)`;
   hctx.drawImage(off, 0, 0, out.width, out.height);
   heat = { key, canvas: out };
   return out;
@@ -630,7 +704,10 @@ function paint(ctx: CanvasRenderingContext2D, ch: number, v: typeof view, baseW:
   const bssids = layerBssids();
   const radios = radiosOf();
   const values = p.points.map((pt) => pointValue(pt, bssids, radios));
-  const samples = p.points.flatMap((pt, i) => (values[i] == null ? [] : [{ x: pt.x, y: pt.y, v: values[i]! }]));
+  // channel map: a measured point without coverage still claims its area, as blank (NaN), so neighbours don't paint over it
+  const samples = p.points.flatMap((pt, i) =>
+    values[i] != null ? [{ x: pt.x, y: pt.y, v: values[i]! }] : metric === "channel" && pt.scans ? [{ x: pt.x, y: pt.y, v: NaN }] : [],
+  );
   const hm = heatmap(samples, baseW, baseH);
   if (hm) {
     ctx.save();
@@ -646,7 +723,7 @@ function paint(ctx: CanvasRenderingContext2D, ch: number, v: typeof view, baseW:
   ctx.font = `${11 * k}px ` + getComputedStyle(document.body).fontFamily;
   // point labels always sit right-below their dot; AP name pills move around them (and each other)
   const ptLabel = (pt: SurveyPoint, i: number) =>
-    live && measuring?.id === pt.id ? `#${i + 1} ${scansPerPoint - measuring.left}/${scansPerPoint}` : `#${i + 1} ${noData(values[i]) ? "–" : Math.round(values[i]!)}`;
+    live && measuring?.id === pt.id ? `#${i + 1} ${scansPerPoint - measuring.left}/${scansPerPoint}` : `#${i + 1} ${noData(values[i]) ? "–" : fmt(values[i]!)}`;
   const taken: Box[] = p.points.flatMap((pt, i) => {
     const x = v.x + pt.x * v.w,
       y = v.y + pt.y * v.h;
@@ -727,7 +804,7 @@ function paint(ctx: CanvasRenderingContext2D, ch: number, v: typeof view, baseW:
     const failed = live && stalled?.id === pt.id;
     ctx.beginPath();
     ctx.arc(x, y, POINT_R * k, 0, Math.PI * 2);
-    ctx.fillStyle = noData(val) ? "#888" : classColor(classOf(val));
+    ctx.fillStyle = noData(val) ? "#888" : valueColor(val);
     ctx.fill();
     ctx.lineWidth = (live && pt.id === selectedPoint ? 3 : 1.5) * k;
     ctx.strokeStyle = "#000";
@@ -765,7 +842,7 @@ function paint(ctx: CanvasRenderingContext2D, ch: number, v: typeof view, baseW:
     }
   }
 
-  legend(ctx, ch, v, k, live);
+  legend(ctx, ch, v, k, live, values);
 }
 
 type Box = { x: number; y: number; w: number; h: number };
@@ -781,13 +858,18 @@ function halo(ctx: CanvasRenderingContext2D, text: string, x: number, y: number,
 }
 
 /** Colour key (and scale bar when calibrated) in the bottom-left corner. */
-function legend(ctx: CanvasRenderingContext2D, ch: number, v: typeof view, k: number, live: boolean) {
+function legend(ctx: CanvasRenderingContext2D, ch: number, v: typeof view, k: number, live: boolean, values: (number | null)[]) {
   const m = METRICS[metric];
   const pad = 6 * k,
     sw = 10 * k,
     lh = 15 * k;
-  const title = `${m.label} (${m.unit}) · ${layerLabel()}`;
-  const items = m.legend.map((t, i) => ({ t, c: classColor(i), w: sw + 4 * k + ctx.measureText(t).width + 8 * k }));
+  const title = `${m.label}${m.unit ? ` (${m.unit})` : ""} · ${layerLabel()}`;
+  // ponytail: channel key is one row; wrap it if surveys show more than ~12 channels
+  const keys =
+    metric === "channel"
+      ? [...new Set(values.filter((x): x is number => x != null))].sort((a, b) => a - b).map((f) => ({ t: `ch ${fmt(f)}`, c: valueColor(f) }))
+      : m.legend.map((t, i) => ({ t, c: classColor(i) }));
+  const items = keys.map((it) => ({ ...it, w: sw + 4 * k + ctx.measureText(it.t).width + 8 * k }));
   const w = Math.max(ctx.measureText(title).width, items.reduce((s, it) => s + it.w, 0)) + pad * 2;
   const h = lh * 2 + pad * 2;
   // on screen: pinned to the map's bottom-left corner whatever the zoom / pan (at "fit" the plan leaves
@@ -858,12 +940,16 @@ async function exportPng() {
   halo(ctx, `${project.name} · ${new Date().toLocaleDateString()}`, w - 10 * k, h + band - 12 * k, k);
   const blob = await new Promise<Blob | null>((ok) => out.toBlob(ok, "image/png"));
   if (!blob) return host.status("PNG export failed");
-  const tag = `${metric}-${layer === "best" ? "all" : layer.replace(/[^\w.-]+/g, "_")}`;
+  const tag = [metric, sel.ssid, sel.band, sel.ap && apLabel(sel.ap), sel.bssid]
+    .filter(Boolean)
+    .join("-")
+    .replace(/[^\w.-]+/g, "_");
   await api.saveFile(`${project.name}-${tag}.png`, new Uint8Array(await blob.arrayBuffer()), "png");
 }
 
 function renderSide() {
-  const sel = $<HTMLSelectElement>("sv-layer");
+  const ssidSel = $<HTMLSelectElement>("sv-ssid");
+  const bssidSel = $<HTMLSelectElement>("sv-bssid");
   const aps = $("sv-aps");
   const pts = $("sv-points");
   const mask = project?.maskFrac ?? DEFAULT_MASK;
@@ -872,6 +958,16 @@ function renderSide() {
   $<HTMLInputElement>("sv-tone").value = String(project?.planTone ?? 0);
   $<HTMLInputElement>("sv-mask").value = String(Math.round(mask * 100));
   $<HTMLSelectElement>("sv-metric").value = metric;
+  // a channel map only makes sense within one band: "All" is off there
+  $("sv-band")
+    .querySelectorAll<HTMLButtonElement>("button")
+    .forEach((b) => {
+      const on = (b.dataset.band || null) === sel.band;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", String(on));
+      b.disabled = !b.dataset.band && metric === "channel";
+    });
+  $("sv-band-hint").hidden = metric !== "channel";
   renderScale();
   for (const id of ["sv-save", "sv-export", "sv-scale-set"]) $<HTMLButtonElement>(id).disabled = !project;
   renderSaved();
@@ -879,28 +975,36 @@ function renderSide() {
   $("sv-eta").textContent = instant ? "instant" : `≈ ${secs} s / point`;
   $("sv-aps-n").textContent = $("sv-points-n").textContent = "";
   if (!project) {
-    sel.innerHTML = `<option value="best">Best signal</option>`;
+    ssidSel.innerHTML = `<option value="">All SSIDs</option>`;
+    $("sv-bssid-row").hidden = true;
     aps.innerHTML = "";
     pts.innerHTML = `<li class="sv-none">Open a floor plan to start.</li>`;
     return;
   }
-  const vis = visibleBssids();
   const bss = project.bss;
-  const ssids = [...new Set(vis.map((b) => ssidLabel(bss[b])))].sort();
-  const groups = apGroups(vis);
-  const opt = (v: string, label: string) => `<option value="${esc(v)}"${v === layer ? " selected" : ""}>${esc(label)}</option>`;
-  // BSSIDs only for the AP being looked at (picked AP, or the AP of the picked BSSID): hundreds of rows otherwise
-  const [kind, ...rest] = layer.split(":");
-  const lv = rest.join(":");
-  const apOfLayer = kind === "ap" ? lv : kind === "bssid" && bss[lv] ? apKey(lv, bss[lv].apName) : null;
-  const apBssids = apOfLayer ? vis.filter((b) => apKey(b, bss[b].apName) === apOfLayer).sort() : [];
-  sel.innerHTML =
-    opt("best", "Best signal (all visible)") +
-    `<optgroup label="SSID">${ssids.map((s) => opt(`ssid:${s}`, s)).join("")}</optgroup>` +
-    `<optgroup label="AP">${groups.map((g) => opt(`ap:${g.key}`, `${g.label} (${g.ssids.join(", ")})`)).join("")}</optgroup>` +
-    (apBssids.length
-      ? `<optgroup label="BSSIDs of this AP">${apBssids.map((b) => opt(`bssid:${b}`, `${b} ${ssidLabel(bss[b])} ch${bss[b].channel}`)).join("")}</optgroup>`
-      : "");
+  const opt = (v: string, label: string, on: boolean) => `<option value="${esc(v)}"${on ? " selected" : ""}>${esc(label)}</option>`;
+  // SSIDs with how many APs carry them, so the busy ones stand out
+  const apsPer = new Map<string, Set<string>>();
+  for (const b of visibleBssids()) {
+    const s = ssidLabel(bss[b]);
+    if (!apsPer.has(s)) apsPer.set(s, new Set());
+    apsPer.get(s)!.add(apKey(b, bss[b].apName));
+  }
+  if (sel.ssid != null && !apsPer.has(sel.ssid)) apsPer.set(sel.ssid, new Set()); // keep the pick visible while the filter hides it
+  ssidSel.innerHTML =
+    opt("", "All SSIDs", sel.ssid == null) +
+    [...apsPer.keys()]
+      .sort()
+      .map((s) => opt(s, `${s} (${apsPer.get(s)!.size} AP)`, s === sel.ssid))
+      .join("");
+  // BSSIDs only for the picked AP: hundreds of rows otherwise
+  const apBssids = sel.ap == null ? [] : scopeBssids().filter((b) => apKey(b, bss[b].apName) === sel.ap).sort();
+  $("sv-bssid-row").hidden = apBssids.length < 2;
+  bssidSel.innerHTML =
+    opt("", "All BSSIDs of this AP", sel.bssid == null) + apBssids.map((b) => opt(b, `${b} · ${ssidLabel(bss[b])} · ch ${bss[b].channel}`, b === sel.bssid)).join("");
+  const groups = apGroups(scopeBssids());
+  $("sv-ap-focus").innerHTML = sel.ap == null ? "" : `Map shows <b>${esc(apLabel(sel.ap))}</b> only <button data-unfocus>Show all</button>`;
+  $("sv-ap-focus").hidden = sel.ap == null;
 
   const cols = AP_COLS.filter((c) => !apView.hidden.includes(c.key));
   const sc = AP_COLS.find((c) => c.key === apView.sort) ?? AP_COLS[0];
@@ -918,22 +1022,23 @@ function renderSide() {
     rows
       .map(
         (g) =>
-          `<tr data-layer="${esc(`ap:${g.key}`)}" data-kbd tabindex="0" class="${layer === `ap:${g.key}` ? "sel" : ""}">` +
+          `<tr data-ap="${esc(g.key)}" data-kbd tabindex="0" class="${sel.ap === g.key ? "sel" : ""}">` +
           cols.map((c) => `<td class="${c.num ? "num" : ""}" title="${c.html(g).replace(/<[^>]+>/g, "")}">${c.html(g)}</td>`).join("") +
           `<td>${project!.apPos?.[g.key] ? `<button data-unplace="${esc(g.key)}" title="Use the estimated position" aria-label="Use the estimated position">↺</button>` : ""}</td></tr>`,
       )
-      .join("");
-  keepFocus(aps, ["data-sort", "data-layer", "data-unplace"], () => (aps.innerHTML = apHtml));
+      .join("") +
+    (rows.length ? "" : `<tr><td class="sv-none" colspan="${cols.length + 1}">No AP heard${sel.ssid != null || sel.band ? " for this SSID / band" : ""}.</td></tr>`);
+  keepFocus(aps, ["data-sort", "data-ap", "data-unplace"], () => (aps.innerHTML = apHtml));
 
   // each point's value for the current layer / metric, so weak spots can be found from the list
   const lb = layerBssids();
   const radios = radiosOf();
-  const unit = { signal: "", second: "", snr: " dB", cci: "" }[metric];
+  const unit = { signal: "", second: "", snr: " dB", cci: "", channel: "" }[metric];
   const valHtml = (p: SurveyPoint) => {
     const v = pointValue(p, lb, radios);
     return noData(v)
       ? `<span class="val none" title="${METRICS[metric].label}: no data">–</span>`
-      : `<span class="val" title="${METRICS[metric].label}"><i class="lvl" style="background:${classColor(classOf(v))}"></i>${Math.round(v)}${unit}</span>`;
+      : `<span class="val" title="${METRICS[metric].label}"><i class="lvl" style="background:${valueColor(v)}"></i>${fmt(v)}${unit}</span>`;
   };
   const ptHtml = project.points.length
     ? project.points
@@ -1074,7 +1179,7 @@ function clickAt(ox: number, oy: number) {
   const hh = hit(ox, oy);
   if (stalled && !hh) stalled = null; // moving on: the failed point stays in the list as "Not measured"
   if (hh?.marker) {
-    layer = `ap:${hh.marker.key}`;
+    sel = { ...sel, ap: hh.marker.key, bssid: null };
     return render();
   }
   if (hh?.point) {
@@ -1257,12 +1362,29 @@ export async function init(h: SurveyHost) {
   $("sv-zoom-out").onclick = () => zoomCentre(1 / 1.5);
   $("sv-zoom-fit").onclick = zoomFit;
 
-  $<HTMLSelectElement>("sv-layer").onchange = (e) => {
-    layer = (e.target as HTMLSelectElement).value;
+  $<HTMLSelectElement>("sv-ssid").onchange = (e) => {
+    sel.ssid = (e.target as HTMLSelectElement).value || null;
+    // channel map: move to a band this SSID uses if the current one has none of it
+    if (metric === "channel" && !bandsInScope().includes(sel.band!)) sel.band = null;
+    render();
+  };
+  $("sv-band").onclick = (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button");
+    if (!b || b.disabled) return;
+    sel.band = (b.dataset.band as Band) || null;
+    render();
+  };
+  $<HTMLSelectElement>("sv-bssid").onchange = (e) => {
+    sel.bssid = (e.target as HTMLSelectElement).value || null;
     render();
   };
   $<HTMLSelectElement>("sv-metric").onchange = (e) => {
-    metric = (e.target as HTMLSelectElement).value as Metric;
+    metric = (e.target as HTMLSelectElement).value as Metric; // channel → normalizeSel picks a band
+    render();
+  };
+  $("sv-ap-focus").onclick = (e) => {
+    if (!(e.target as HTMLElement).closest("[data-unfocus]")) return;
+    sel = { ...sel, ap: null, bssid: null };
     render();
   };
   $<HTMLSelectElement>("sv-n").onchange = (e) => {
@@ -1391,9 +1513,9 @@ export async function init(h: SurveyHost) {
       autosave();
       return render();
     }
-    const tr = t.closest<HTMLElement>("tr[data-layer]");
+    const tr = t.closest<HTMLElement>("tr[data-ap]");
     if (!tr) return;
-    layer = layer === tr.dataset.layer ? "best" : tr.dataset.layer!;
+    sel = { ...sel, ap: sel.ap === tr.dataset.ap ? null : tr.dataset.ap!, bssid: null };
     render();
   };
   $("sv-points").onclick = (e) => {
