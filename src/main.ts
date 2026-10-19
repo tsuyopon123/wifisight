@@ -195,12 +195,25 @@ function explain(err: string): { title: string; hint: string; act?: Act } {
   const e = err.toLowerCase();
   if (e.includes("desktop app"))
     return { title: "Scanning needs the desktop app", hint: "This browser preview can't reach Wi-Fi. Run the app (npm run tauri dev) to scan." };
-  if (e.includes("probe"))
+  if (e.includes("probe")) {
+    // probe_get: "unreachable" = no connection; "HTTP 500: …" = the probe answered but its scan failed
+    const p = state.probe ?? "";
+    if (/bad response|: http 404:/.test(e))
+      return { title: `${p} isn't a WiFiSight probe`, hint: "Check the address and port, and that it runs a current wifisight-cli serve.", act: "settings" };
+    if (/: http \d{3}:/.test(e))
+      return {
+        title: `Probe ${p} can't scan`,
+        hint: e.includes("permission")
+          ? "The probe needs CAP_NET_ADMIN to scan (the wifisight-probe service grants it) — check the service on the probe."
+          : "Check that Wi-Fi is on at the probe, or pick another interface in Settings.",
+        act: "settings",
+      };
     return {
-      title: `Probe ${state.probe ?? ""} isn't answering`,
-      hint: "Check the Ethernet cable and that wifisight-cli serve is running on the Pi — or clear Probe in Settings to use this computer's Wi-Fi.",
+      title: `Can't reach probe ${p}`,
+      hint: "Check that this computer can reach it on the network and that wifisight-cli serve is running there — or clear Probe in Settings to use this computer's Wi-Fi.",
       act: "settings",
     };
+  }
   if (e.includes("permission")) {
     if (state.os === "macos")
       return { title: "Location access is off", hint: "macOS only lets apps scan Wi-Fi with Location Services on: System Settings › Privacy & Security › Location Services.", act: "location" };
