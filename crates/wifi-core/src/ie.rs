@@ -498,6 +498,8 @@ pub fn vendor_ap_name(v: &[u8]) -> Option<String> {
         ([0x00, 0xa0, 0xf8], 0x01) => len_prefixed(p.get(7..)?)?,
         // Fortinet: u16 LE subtype 10 (SYSTEM), then type/length TLVs; 1 = AP name
         ([0x00, 0x09, 0x0f], 10) if p.first() == Some(&0) => tlv(&p[1..], 1)?,
+        // MikroTik (also TP-Link Pharos): 2 unknown bytes, then type/length TLVs; 1 = 10 bytes, then radio name
+        ([0x00, 0x0c, 0x42], 0x00) => tlv(p.get(2..)?, 1)?.get(10..)?,
         _ => return None,
     };
     Some(printable(name)).filter(|s| !s.is_empty())
@@ -591,6 +593,7 @@ pub fn vendor_oui_name(oui: &[u8]) -> Option<&'static str> {
         [0x00, 0x90, 0x4c] => "Broadcom (Epigram)",
         [0x00, 0x03, 0x7f] => "Qualcomm Atheros",
         [0x8c, 0xfd, 0xf0] => "Qualcomm",
+        [0x00, 0x0c, 0x42] => "MikroTik",
         [0x00, 0x0c, 0x43] => "MediaTek (Ralink)",
         [0x00, 0x0c, 0xe7] => "MediaTek",
         [0x00, 0x17, 0xf2] => "Apple",
@@ -1215,6 +1218,16 @@ mod tests {
         );
         assert_eq!(vendor_ap_name(b"\x00\x13\x92\x03"), None);
         assert_eq!(vendor_ap_name(b"\x00\x13"), None);
+        // seen in the field: RouterBoard (default radio name = MAC) and TP-Link CPE710
+        let mikrotik = [
+            ("000c42000000011e00100000066630060000303835353331454141413042000000000000000005027c15", Some("085531EAAA0B")),
+            ("000c42000000011e0000000000660001ff0f4350453731300000000000000000000000000000", Some("CPE710")),
+            // CPE710's other type-0 IE: TLV 2 (model / firmware) only
+            ("000c420000000240435045373130", None),
+        ];
+        for (h, want) in mikrotik {
+            assert_eq!(vendor_ap_name(&unhex(h)).as_deref(), want, "{h}");
+        }
     }
 
     #[test]
