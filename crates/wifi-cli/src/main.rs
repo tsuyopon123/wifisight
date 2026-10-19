@@ -66,7 +66,7 @@ enum Cmd {
     },
     /// Run as an external probe: serve raw scans over HTTP (GET /, /interfaces, /scan?iface=X, /link?iface=X)
     Serve {
-        /// Address to listen on (e.g. the direct Ethernet link: 169.254.x.x:8737)
+        /// Address to listen on (e.g. one interface's IP: 192.168.1.20:8737)
         #[arg(long, default_value = "0.0.0.0:8737")]
         listen: String,
         /// Default interface when the request has no ?iface=
@@ -303,7 +303,7 @@ fn handle(
     );
 }
 
-// ponytail: no auth, read-only, thread per connection — meant for a point-to-point Ethernet / USB link.
+// ponytail: no auth, read-only, thread per connection — meant for a trusted network.
 fn serve(listen: &str, default_iface: Option<String>) {
     let listener = std::net::TcpListener::bind(listen).unwrap_or_else(|e| {
         eprintln!("cannot listen on {listen}: {e}");
