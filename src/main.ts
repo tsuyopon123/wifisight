@@ -380,7 +380,10 @@ function bind() {
   };
   $("mode-seg").onclick = (e) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>("button[data-mode]");
-    if (b) setMode(b.dataset.mode as typeof state.mode);
+    if (!b) return;
+    // phones: details covers the list, so Scanner means "back to the list"
+    if (b.dataset.mode === "scanner" && matchMedia("(max-width: 720px)").matches) state.table.selected = null;
+    setMode(b.dataset.mode as typeof state.mode);
   };
   $<HTMLInputElement>("probe").onchange = (e) => {
     state.probe = (e.target as HTMLInputElement).value.trim() || null;
