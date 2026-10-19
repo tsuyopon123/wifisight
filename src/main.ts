@@ -336,6 +336,7 @@ function setRunning(on: boolean) {
   state.running = on;
   state.scanSeq++;
   $("btn-run").textContent = on ? "Pause" : "Start";
+  $("btn-run").classList.toggle("live", on);
   window.clearTimeout(timer);
   if (on) {
     dropScans(); // the user may have moved while paused
@@ -388,7 +389,7 @@ function bind() {
     const b = (e.target as HTMLElement).closest<HTMLElement>("button[data-mode]");
     if (!b) return;
     // phones: details covers the list, so Scanner means "back to the list"
-    if (b.dataset.mode === "scanner" && matchMedia("(max-width: 720px)").matches) state.table.selected = null;
+    if (b.dataset.mode === "scanner" && phone()) state.table.selected = null;
     setMode(b.dataset.mode as typeof state.mode);
   };
   $<HTMLInputElement>("probe").onchange = (e) => {
@@ -787,6 +788,37 @@ async function requestLocation() {
   renderNotice();
   $("btn-run").title = state.running && state.lastError ? "Scanning, but every scan is failing — see the message above (Space pauses)" : "Start / pause scanning (Space)";
 }
+
+const phone = () => matchMedia("(max-width: 720px)").matches;
+
+// phones: Android's back gesture walks the WebView history (no history = the app closes). While a layer is open
+// (a dialog, the ☰ controls, details, Channels / Survey) one entry stands for it, and going back closes the top one.
+function backLayer(): (() => void) | null {
+  const dlg = document.querySelector<HTMLDialogElement>("dialog[open]");
+  if (dlg) return () => dlg.close();
+  if (document.body.classList.contains("more-open")) return () => $("btn-more").click();
+  if (state.table.selected && state.mode === "scanner") return () => select(null);
+  if (state.mode !== "scanner")
+    return () => {
+      state.table.selected = null;
+      setMode("scanner");
+    };
+  return null;
+}
+
+function syncBack() {
+  if (!phone()) return;
+  const open = !!backLayer();
+  if (open && !history.state?.layer) history.pushState({ layer: true }, "");
+  else if (!open && history.state?.layer) history.back(); // its popstate finds nothing left to close
+}
+
+window.addEventListener("popstate", () => {
+  backLayer()?.();
+  syncBack();
+});
+// layers open and close on clicks and keys (Esc); capture sees them even where a handler stops propagation
+for (const type of ["click", "keydown", "close"]) document.addEventListener(type, () => setTimeout(syncBack), true);
 
 function select(bssid: string | null, scroll = false) {
   state.table.selected = state.table.selected === bssid && !scroll ? null : bssid;

@@ -99,6 +99,11 @@ tr[tabindex]:focus-visible,
 li[tabindex]:focus-visible {
   outline-offset: -2px;
 }
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"] {
+  accent-color: var(--accent);
+}
 ::placeholder {
   color: var(--fg-3);
   opacity: 1;
@@ -1278,6 +1283,24 @@ button.icon-label {
   align-items: center;
   gap: 5px;
 }
+#mode-seg svg,
+#details .i-back {
+  display: none;
+}
+#details [data-act="close"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#details [data-act="close"] svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 button.icon-label svg {
   width: 14px;
   height: 14px;
@@ -1345,53 +1368,189 @@ button.icon-label svg {
     display: none;
   }
 
-  /* toolbar: just the mode switch and ☰; ☰ opens every other control below it */
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:hover {
+    border-color: var(--line-2); /* touch leaves :hover stuck on the last button tapped */
+  }
+  button:active {
+    background: color-mix(in srgb, var(--fg) 10%, var(--bg-3));
+  }
+  button.primary:active {
+    background: color-mix(in srgb, var(--fg) 18%, var(--accent));
+  }
+  #table-wrap,
+  #details,
+  #sv-side {
+    overscroll-behavior: contain;
+  }
+
+  /* top bar: filter, Pause / Start and ☰; ☰ opens the other controls below it, two to a row */
   .toolbar {
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px 10px;
-    padding: 6px 10px;
+    gap: 10px 8px;
+    padding: 8px 12px;
   }
   .tb-main,
   .tb-end {
     display: contents;
   }
-  #mode-seg {
-    flex: 1 1 calc(100% - 64px); /* the row is the switch and ☰ only, opened controls wrap below */
+  #filter {
+    order: 0;
+    flex: 1 1 calc(100% - 180px); /* leaves Pause and ☰ on this row; everything after wraps */
+    min-width: 0;
+    max-width: none;
+    border-radius: 999px;
+    padding-inline: 16px;
+    background: var(--bg-3);
+    border-color: transparent;
   }
-  #mode-seg button {
+  #btn-run {
+    order: 1;
+    min-width: 0;
+    border-radius: 999px;
+    padding-inline: 16px;
+  }
+  #btn-more {
+    order: 2;
+    position: relative;
+    justify-content: center;
+    width: 44px;
+    padding: 0;
+    border-radius: 999px;
+  }
+  #btn-more svg {
+    width: 20px;
+    height: 20px;
+    color: var(--fg);
+  }
+  .field:has(#sel-interval) {
+    order: 3;
+  }
+  .field:has(#sel-sort) {
+    order: 4;
+  }
+  .field:has(#sel-interval),
+  .field:has(#sel-sort),
+  .toolbar .check {
+    flex: 1 1 40%;
+  }
+  .toolbar .field select {
+    flex: 1;
+    min-width: 0;
+  }
+  #band-filter {
+    order: 5;
+    flex: 1 1 100%;
+  }
+  #band-filter button {
     flex: 1;
   }
-  #btn-more {
-    order: 1;
+  .toolbar .check {
+    order: 6;
+    min-height: 40px;
   }
-  :is(.tb-main, .tb-end) > :not(#mode-seg) {
-    order: 2;
+  .tb-end > * {
+    order: 7;
+    flex: 1 1 28%; /* a row of their own: the checkboxes' row has no 28% left */
+    justify-content: center;
   }
-  body:not(.more-open) :is(.tb-main, .tb-end) > :not(#mode-seg) {
+  .tb-end .menu > button {
+    width: 100%;
+  }
+  body:not(.more-open) .toolbar > :is(.tb-main, .tb-end) > :not(#mode-seg, #filter, #btn-run) {
     display: none !important;
-  }
-  #btn-more {
-    position: relative;
   }
   #btn-more.filtered::after {
     content: "";
     position: absolute;
-    top: 5px;
-    right: 5px;
+    top: 6px;
+    right: 6px;
     width: 8px;
     height: 8px;
     border-radius: 50%;
     background: var(--accent);
+    box-shadow: 0 0 0 2px var(--bg-3);
   }
   .more-open #btn-more {
-    background: var(--bg-2);
+    background: var(--sel);
     border-color: var(--accent);
   }
-  #filter {
-    flex-basis: 100%;
-    min-width: 0;
-    max-width: none;
+  .more-open .toolbar {
+    box-shadow: 0 6px 16px -8px rgba(0, 0, 0, 0.35);
+    z-index: var(--z-pop);
+  }
+  /* scanning: a dot breathes on Pause */
+  #btn-run.live {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #btn-run.live::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  body.mode-survey #btn-run.live::before {
+    background: var(--good);
+  }
+
+  /* modes: a bottom navigation bar within thumb reach */
+  body {
+    padding-bottom: 64px;
+  }
+  #mode-seg {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: var(--z-pop);
+    height: 64px;
+    border: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 0;
+    background: var(--bg-2);
+  }
+  #mode-seg button {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--fg-3);
+    font-size: 12.5px;
+    font-weight: 500;
+  }
+  #mode-seg svg {
+    display: block;
+    box-sizing: content-box;
+    width: 22px;
+    height: 22px;
+    padding: 4px 20px;
+    border-radius: 999px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  #mode-seg button.on {
+    color: var(--fg);
+    font-weight: 600;
+  }
+  #mode-seg button.on svg {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    color: var(--accent);
+  }
+  #mode-seg button:active svg {
+    background: var(--hover);
   }
 
   /* Scanner = the list, Channels = the charts, one at a time */
@@ -1486,6 +1645,15 @@ button.icon-label svg {
     color: var(--fg-2);
     font-size: 13.5px;
   }
+  #bss-table tr {
+    background: transparent; /* no zebra on cards */
+  }
+  #bss-table tr.sel {
+    background: var(--sel);
+  }
+  #bss-table tr:active {
+    background: var(--hover);
+  }
   #bss-table tr::before,
   #bss-table tr::after {
     content: "";
@@ -1545,8 +1713,16 @@ button.icon-label svg {
   #bss-table td[data-k="band"]::after {
     content: " GHz";
   }
+  #bss-table td[data-k="ch"] {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+  }
   #bss-table td[data-k="ch"]::before {
-    content: "ch ";
+    content: "ch";
+  }
+  #bss-table td[data-k="ch"] .tag {
+    order: 1; /* "ch 56 DFS" */
   }
   #bss-table td[data-k="width"] span {
     display: none; /* center channel */
@@ -1579,6 +1755,38 @@ button.icon-label svg {
     inset: 0;
     z-index: calc(var(--z-sticky) + 1); /* over the table's sticky header */
     border-left: 0;
+  }
+  #details {
+    padding-top: 0;
+  }
+  #details .d-actions {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    align-items: center;
+    margin: 0 -14px 10px;
+    padding: 8px 12px;
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--line);
+  }
+  #details [data-act="close"] {
+    order: -1;
+    margin-right: auto;
+    width: 44px;
+    padding: 0;
+    border-color: transparent;
+    background: transparent;
+    border-radius: 999px;
+  }
+  #details [data-act="close"] svg {
+    width: 22px;
+    height: 22px;
+  }
+  #details .i-close {
+    display: none;
+  }
+  #details .i-back {
+    display: block;
   }
   body.mode-channels #details {
     display: none; /* the selection stays highlighted on the chart */

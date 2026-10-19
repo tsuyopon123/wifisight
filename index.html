@@ -10,11 +10,11 @@
     <header class="toolbar">
       <div class="tb-main">
         <div class="seg" id="mode-seg" role="group" aria-label="Mode">
-          <button data-mode="scanner" class="on" aria-pressed="true" title="Scanner (⌘1 / Ctrl+1)">Scanner</button>
-          <button data-mode="channels" aria-pressed="false" class="phone-only">Channels</button>
-          <button data-mode="survey" aria-pressed="false" title="Survey (⌘2 / Ctrl+2)">Survey</button>
+          <button data-mode="scanner" class="on" aria-pressed="true" title="Scanner (⌘1 / Ctrl+1)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><path d="M12 20h.01"/></svg><span>Scanner</span></button>
+          <button data-mode="channels" aria-pressed="false" class="phone-only"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 16v-5"/><path d="M12 16V7"/><path d="M17 16v-8"/></svg><span>Channels</span></button>
+          <button data-mode="survey" aria-pressed="false" title="Survey (⌘2 / Ctrl+2)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.1 6.03 9.9 3.93a2 2 0 0 0-1.79 0L3.55 6.2A1 1 0 0 0 3 7.1v12.28a1 1 0 0 0 1.45.9l3.66-1.84a2 2 0 0 1 1.79 0l4.21 2.11a2 2 0 0 0 1.79 0l4.55-2.28a1 1 0 0 0 .55-.89V5.1a1 1 0 0 0-1.45-.9l-3.66 1.84a2 2 0 0 1-1.79 0Z"/><path d="M9 3.5v15"/><path d="M15 5.5v15"/></svg><span>Survey</span></button>
         </div>
-        <button id="btn-run" class="primary" title="Start / pause scanning (Space)">Pause</button>
+        <button id="btn-run" class="primary live" title="Start / pause scanning (Space)">Pause</button>
         <label class="field">Interval
           <select id="sel-interval">
             <option value="0" selected>Realtime</option>
@@ -46,7 +46,7 @@
         <label class="check scanner-only"><input type="checkbox" id="chk-charts" checked /> charts</label>
       </div>
       <button id="btn-more" class="phone-only icon-label" aria-expanded="false" aria-label="More controls" title="More controls">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/></svg>
       </button>
       <div class="tb-end">
         <div class="menu scanner-only">
