@@ -6,7 +6,7 @@ import { launch, sleep } from "./harness.mjs";
 const BSSID = "aa:bb:cc:dd:ee:01";
 
 const MOCK = `(() => {
-  const m = (window.__mock = { rssi: { en0: -50, en1: -50 }, fail: false, failN: { en0: 0, en1: 0 }, delay: 300, autosave: null, scans: 0, errors: 0,
+  const m = (window.__mock = { rssi: { en0: -50, en1: -50 }, fail: false, failN: { en0: 0, en1: 0 }, delay: 300, autosave: null, scans: 0, errors: 0, extra: 0,
     link: { bssid: "${BSSID}", ssid: "event-net", rssiDbm: -70, txMbps: 866.7, rxMbps: null, mcs: 11, nss: 2 } });
   const bss = (rssi) => ({ bssid: "${BSSID}", ssid: "event-net", hidden: false, vendor: null, locallyAdministered: false, apName: "hall-1", model: null,
     band: "5", freqMhz: 5180, channel: 36, centerChannel: 36, centerFreqMhz: 5180, widthMhz: 20, freqLowMhz: 5170, freqHighMhz: 5190,
@@ -33,7 +33,7 @@ const MOCK = `(() => {
           if (m.failN[iface] > 0) { m.failN[iface]--; m.errors++; throw "mock scan failed"; }
           if (m.fail) { m.errors++; throw "mock scan failed"; }
           m.scans++;
-          return { timestampMs: Date.now(), interface: iface, bss: [bss(rssi)], warnings: [] };
+          return { timestampMs: Date.now(), interface: iface, bss: [bss(rssi), ...Array.from({ length: m.extra }, (_, i) => ({ ...bss(-60), bssid: "02:00:00:00:00:" + i.toString(16).padStart(2, "0") }))], warnings: [] };
         }
         case "link_info": return m.link;
         case "autosave_read": return m.autosave;
@@ -262,6 +262,20 @@ try {
     const row = await ev(`[...document.querySelectorAll("#roams-table tbody td")].slice(1).map((td) => td.textContent).join("|")`);
     check("L4 log row names the old AP from the scan", row, "roam|hall-1 (aa:bb:cc:dd:ee:01)|aa:bb:cc:dd:ee:02|-70 → -48|867 → 1200|");
     await ev(`document.getElementById("dlg-roams").close()`);
+  }
+
+  // ───────── scanner: a rescan keeps the list's scroll position ─────────
+  {
+    await ev(`window.__mock.extra = 80; document.querySelector('#mode-seg button[data-mode="scanner"]').click()`);
+    await waitFor(`document.querySelectorAll("#bss-table tbody tr").length > 80`, 5000);
+    const th = await ev(`(() => { const r = document.querySelector('#bss-table th[data-sort]').getBoundingClientRect(); return { x: r.left + 10, y: r.top + r.height / 2 }; })()`);
+    await click(th); // sort: leaves focus on the header, which every render rebuilds
+    await ev(`(() => { const w = document.getElementById("table-wrap"); w.style.width = "500px"; w.scrollTop = 400; w.scrollLeft = 300; })()`);
+    const n = await ev("window.__mock.scans");
+    await waitFor(`window.__mock.scans > ${n + 1}`, 5000);
+    await sleep(50);
+    check("S1 header focused after sorting", await ev(`document.activeElement.matches("#bss-table th")`), true);
+    check("S2 rescan keeps the list scrolled", await ev(`(({ scrollTop, scrollLeft }) => [scrollTop, scrollLeft])(document.getElementById("table-wrap"))`).then(JSON.stringify), "[400,300]");
   }
 
 } catch (e) {
