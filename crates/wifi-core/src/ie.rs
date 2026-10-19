@@ -498,8 +498,8 @@ pub fn vendor_ap_name(v: &[u8]) -> Option<String> {
         ([0x00, 0xa0, 0xf8], 0x01) => len_prefixed(p.get(7..)?)?,
         // Fortinet: u16 LE subtype 10 (SYSTEM), then type/length TLVs; 1 = AP name
         ([0x00, 0x09, 0x0f], 10) if p.first() == Some(&0) => tlv(&p[1..], 1)?,
-        // MikroTik (also TP-Link Pharos): 2 unknown bytes, then type/length TLVs; 1 = 10 bytes, then radio name
-        ([0x00, 0x0c, 0x42], 0x00) => tlv(p.get(2..)?, 1)?.get(10..)?,
+        // MikroTik (also TP-Link Pharos): type/length TLVs; 1 = 10 unknown bytes, then the radio name
+        ([0x00, 0x0c, 0x42], _) => tlv(p, 1)?.get(10..)?,
         _ => return None,
     };
     Some(printable(name)).filter(|s| !s.is_empty())
@@ -1224,6 +1224,9 @@ mod tests {
             ("000c42000000011e0000000000660001ff0f4350453731300000000000000000000000000000", Some("CPE710")),
             // CPE710's other type-0 IE: TLV 2 (model / firmware) only
             ("000c420000000240435045373130", None),
+            // non-empty leading TLV 0; TLV 1 shorter than 10 bytes, then one holding a name
+            ("000c420000020102010400000000", None),
+            ("000c420000020102010c0000000000000000000061", Some("a")),
         ];
         for (h, want) in mikrotik {
             assert_eq!(vendor_ap_name(&unhex(h)).as_deref(), want, "{h}");
