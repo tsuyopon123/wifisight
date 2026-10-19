@@ -157,11 +157,15 @@ fn iface_query(iface: Option<String>) -> String {
 /// Current link of the interface (local or on the probe); polled every second, no scan.
 #[tauri::command]
 async fn link_info(
+    #[allow(unused_variables)] app: tauri::AppHandle,
     iface: Option<String>,
     probe: Option<String>,
 ) -> Result<Option<LinkInfo>, String> {
     tauri::async_runtime::spawn_blocking(move || match probe.filter(|p| !p.trim().is_empty()) {
         Some(p) => probe_get(&p, &format!("/link{}", iface_query(iface))),
+        #[cfg(target_os = "android")]
+        None => android::link(&app),
+        #[cfg(not(target_os = "android"))]
         None => wifi_scan::link(iface.as_deref()).map_err(|e| e.to_string()),
     })
     .await
@@ -409,7 +413,7 @@ mod android {
     use std::time::{Duration, Instant};
     use tauri::plugin::{Builder, PluginHandle, TauriPlugin};
     use tauri::{AppHandle, Manager, Wry};
-    use wifi_scan::{Interface, ScanOutput};
+    use wifi_scan::{Interface, LinkInfo, ScanOutput};
 
     struct Scanner(PluginHandle<Wry>);
 
@@ -476,6 +480,19 @@ mod android {
             bss,
             warnings,
         })
+    }
+
+    /// Current association; MCS / NSS stay None (Android doesn't expose them). Blocks like scan().
+    pub fn link(app: &AppHandle) -> Result<Option<LinkInfo>, String> {
+        #[derive(Deserialize)]
+        struct Out {
+            link: Option<LinkInfo>,
+        }
+        app.state::<Scanner>()
+            .0
+            .run_mobile_plugin::<Out>("link", ())
+            .map(|o| o.link)
+            .map_err(|e| e.to_string())
     }
 
     #[derive(Deserialize)]

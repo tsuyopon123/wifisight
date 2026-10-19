@@ -16,6 +16,7 @@ import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * Wi-Fi scanner for Android. Returns wifi_core::RawBss JSON (BSSID, frequency, RSSI, raw IEs);
@@ -86,6 +87,29 @@ class WifiScanPlugin(private val activity: Activity) : Plugin(activity) {
             put("warnings", warnings)
             put("newestUs", results.maxOfOrNull { it.timestamp } ?: 0L) // changes when a scan lands
         })
+    }
+
+    /** The current association as wifi_scan::LinkInfo, or null when not connected / redacted. */
+    @Command
+    fun link(invoke: Invoke) {
+        @Suppress("DEPRECATION")
+        val i = wifi.connectionInfo
+        val bssid = i?.bssid?.lowercase()
+        // 02:00:00:00:00:00: not connected, or hidden without location access
+        if (i == null || bssid == null || bssid == "02:00:00:00:00:00") {
+            invoke.resolve(JSObject().apply { put("link", JSONObject.NULL) })
+            return
+        }
+        val ssid = i.ssid?.takeIf { it != WifiManager.UNKNOWN_SSID }?.removeSurrounding("\"")
+        val o = JSObject()
+        o.put("bssid", bssid)
+        o.put("ssid", ssid ?: JSONObject.NULL)
+        o.put("rssiDbm", if (i.rssi == -127) JSONObject.NULL else i.rssi) // -127: INVALID_RSSI
+        o.put("txMbps", if (i.txLinkSpeedMbps < 0) JSONObject.NULL else i.txLinkSpeedMbps)
+        o.put("rxMbps", if (i.rxLinkSpeedMbps < 0) JSONObject.NULL else i.rxLinkSpeedMbps)
+        o.put("mcs", JSONObject.NULL)
+        o.put("nss", JSONObject.NULL)
+        invoke.resolve(JSObject().apply { put("link", o) })
     }
 
     private fun toRawBss(r: ScanResult, connected: String?, nowUs: Long): JSObject {
