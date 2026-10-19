@@ -59,7 +59,12 @@ enum Cmd {
         #[arg(long, default_value_t = 0)]
         count: u64,
     },
-    /// Run as an external probe: serve raw scans over HTTP (GET /, /interfaces, /scan?iface=X)
+    /// Current link (BSSID, TX/RX rate, MCS, NSS) as one JSON line; `null` when not connected
+    Link {
+        #[arg(short, long)]
+        iface: Option<String>,
+    },
+    /// Run as an external probe: serve raw scans over HTTP (GET /, /interfaces, /scan?iface=X, /link?iface=X)
     Serve {
         /// Address to listen on (e.g. the direct Ethernet link: 169.254.x.x:8737)
         #[arg(long, default_value = "0.0.0.0:8737")]
@@ -276,12 +281,20 @@ fn handle(
             Err(e) => ("500 Internal Server Error", e.to_string()),
         },
         "/scan" => serve_scan(last, iface),
+        // no scan lock: a link read doesn't touch the radio, and the GUI polls it every second
+        "/link" => match wifi_scan::link(iface.as_deref()) {
+            Ok(l) => ("200 OK", serde_json::to_string(&l).unwrap()),
+            Err(e) => ("500 Internal Server Error", e.to_string()),
+        },
         _ => ("404 Not Found", "not found".into()),
     };
-    eprintln!(
-        "{} {target} -> {status}",
-        line.split_whitespace().next().unwrap_or("?")
-    );
+    // polled every second: only log failures
+    if path != "/link" || !status.starts_with("200") {
+        eprintln!(
+            "{} {target} -> {status}",
+            line.split_whitespace().next().unwrap_or("?")
+        );
+    }
     let mut w = &stream;
     let _ = write!(
         w,
@@ -313,6 +326,13 @@ fn main() {
         .map(|t| OuiDb::from_ieee_csv(&t));
     match cli.cmd {
         Cmd::Serve { listen, iface } => serve(&listen, iface),
+        Cmd::Link { iface } => match wifi_scan::link(iface.as_deref()) {
+            Ok(l) => println!("{}", serde_json::to_string(&l).unwrap()),
+            Err(e) => {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        },
         Cmd::Interfaces => match wifi_scan::interfaces() {
             Ok(list) => {
                 for i in list {

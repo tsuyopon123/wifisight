@@ -7,12 +7,13 @@ use tauri_plugin_dialog::DialogExt;
 #[cfg(desktop)]
 use tauri_plugin_updater::UpdaterExt;
 use wifi_core::{analyze, BssInfo, OuiDb};
-use wifi_scan::Interface;
+use wifi_scan::{Interface, LinkInfo};
 
 const OUI_URL: &str = "https://standards-oui.ieee.org/oui/oui.csv";
 /// Published releases, newest first, pre-releases included (drafts are hidden without auth).
 #[cfg(desktop)]
-const RELEASES_API: &str = "https://api.github.com/repos/tsuyopon123/wifisight/releases?per_page=20";
+const RELEASES_API: &str =
+    "https://api.github.com/repos/tsuyopon123/wifisight/releases?per_page=20";
 
 /// Managed on the builder, not in setup(): on Android the page can call commands before setup() runs.
 #[derive(Default)]
@@ -135,6 +136,38 @@ async fn list_interfaces(probe: Option<String>) -> Result<Vec<Interface>, String
     .map_err(|e| e.to_string())?
 }
 
+/// "?iface=<percent-encoded>" for probe requests, "" for the probe's default interface.
+fn iface_query(iface: Option<String>) -> String {
+    iface
+        .map(|i| {
+            let enc: String = i
+                .bytes()
+                .map(|c| match c {
+                    b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                        (c as char).to_string()
+                    }
+                    _ => format!("%{c:02X}"),
+                })
+                .collect();
+            format!("?iface={enc}")
+        })
+        .unwrap_or_default()
+}
+
+/// Current link of the interface (local or on the probe); polled every second, no scan.
+#[tauri::command]
+async fn link_info(
+    iface: Option<String>,
+    probe: Option<String>,
+) -> Result<Option<LinkInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || match probe.filter(|p| !p.trim().is_empty()) {
+        Some(p) => probe_get(&p, &format!("/link{}", iface_query(iface))),
+        None => wifi_scan::link(iface.as_deref()).map_err(|e| e.to_string()),
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 async fn scan(
     #[allow(unused_variables)] app: tauri::AppHandle,
@@ -146,21 +179,7 @@ async fn scan(
     tauri::async_runtime::spawn_blocking(move || {
         let probe = probe.filter(|p| !p.trim().is_empty());
         let (interface, raws, warnings) = if let Some(p) = probe {
-            let q = iface
-                .map(|i| {
-                    let enc: String = i
-                        .bytes()
-                        .map(|c| match c {
-                            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
-                                (c as char).to_string()
-                            }
-                            _ => format!("%{c:02X}"),
-                        })
-                        .collect();
-                    format!("?iface={enc}")
-                })
-                .unwrap_or_default();
-            let o: wifi_scan::ScanOutput = probe_get(&p, &format!("/scan{q}"))?;
+            let o: wifi_scan::ScanOutput = probe_get(&p, &format!("/scan{}", iface_query(iface)))?;
             (format!("probe:{}", o.interface), o.bss, o.warnings)
         } else {
             // blocking pool, not the UI thread, so waiting on the Kotlin plugin is fine
@@ -242,7 +261,8 @@ fn beta_manifest_url() -> Result<tauri::Url, String> {
         .body_mut()
         .read_to_string()
         .map_err(|e| format!("release list: {e}"))?;
-    let releases: Vec<Release> = serde_json::from_str(&body).map_err(|e| format!("release list: {e}"))?;
+    let releases: Vec<Release> =
+        serde_json::from_str(&body).map_err(|e| format!("release list: {e}"))?;
     let url = releases
         .into_iter()
         .flat_map(|r| r.assets)
@@ -268,7 +288,10 @@ struct UpdateMetadata {
 /// endpoint). Returns what the JS `Update` class takes, so download/install stay the plugin's.
 #[cfg(desktop)]
 #[tauri::command]
-async fn check_update(webview: tauri::Webview, beta: bool) -> Result<Option<UpdateMetadata>, String> {
+async fn check_update(
+    webview: tauri::Webview,
+    beta: bool,
+) -> Result<Option<UpdateMetadata>, String> {
     let mut builder = webview.updater_builder();
     if beta {
         let url = tauri::async_runtime::spawn_blocking(beta_manifest_url)
@@ -304,7 +327,8 @@ fn save_with_dialog(
     let Some(path) = dialog
         .set_file_name(name)
         .add_filter(ext.to_uppercase(), &[ext])
-        .blocking_save_file() // async command: off the main thread, like the plugin's own save
+        .blocking_save_file()
+    // async command: off the main thread, like the plugin's own save
     else {
         return Ok(None);
     };
@@ -509,6 +533,7 @@ pub fn run() {
             list_interfaces,
             probe_info,
             scan,
+            link_info,
             update_oui_db,
             save_text,
             autosave_write,

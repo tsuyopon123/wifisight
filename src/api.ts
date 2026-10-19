@@ -1,7 +1,7 @@
 // Backend abstraction: Tauri commands when running in the app. In a plain
 // browser (`npm run dev`) the UI loads but scanning reports an error.
 
-import type { Interface, PlatformInfo, ProbeInfo, Snapshot } from "./types";
+import type { Interface, LinkInfo, PlatformInfo, ProbeInfo, Snapshot } from "./types";
 
 export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -30,6 +30,11 @@ export async function listInterfaces(probe: string | null): Promise<Interface[]>
 export async function scan(iface: string | null, probe: string | null): Promise<Snapshot> {
   if (isTauri) return invoke("scan", { iface, probe });
   throw new Error(DESKTOP_ONLY);
+}
+
+export async function linkInfo(iface: string | null, probe: string | null): Promise<LinkInfo | null> {
+  if (isTauri) return invoke("link_info", { iface, probe });
+  return null;
 }
 
 export async function updateOui(): Promise<number> {

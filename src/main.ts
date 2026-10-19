@@ -3,7 +3,8 @@ import { ChartView, PAD, type Tab } from "./charts";
 import * as survey from "./survey";
 import { detailsText, renderDetails } from "./details";
 import { COLUMNS, layout, moveCol, renderBody, renderHead, resetLayout, saveLayout, sortTracks, toCsv, toggleCol, type TableState } from "./table";
-import type { Band, Snapshot, Track } from "./types";
+import { eventKind, eventsCsv, gaps, linkChange, linkText } from "./link";
+import type { Band, LinkEvent, LinkInfo, Snapshot, Track } from "./types";
 import { colorFor, esc, keepFocus, matchFilter } from "./util";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -24,8 +25,12 @@ const state = {
   tracks: new Map<string, Track>(),
   latestScan: 0,
   scanCount: 0,
+  scanSeq: 0, // bumped per scan, failed scan and pause/resume, so the signal chart can tell "BSS missed" from "slow interval"
   lastInterface: "",
   connLabel: "",
+  link: null as LinkInfo | null,
+  // ponytail: in-memory, capped; C3 (disk log) can persist it
+  linkEvents: [] as LinkEvent[],
   os: "",
   installable: false,
   location: null as string | null,
@@ -37,9 +42,12 @@ const chart = new ChartView($<HTMLCanvasElement>("chart"));
 let timer: number | undefined;
 let scanning = false;
 let gen = 0; // bumped by dropScans; scans started before it are dropped
+let linkBusy = false;
+let linkGen = 0; // bumped when the interface / probe changes, so the switch isn't logged as a roam
+let linkKnown = false; // the first answer after a reset only sets the baseline
 
-function passesFilters(t: Track): boolean {
-  return state.bands.has(t.info.band) && (state.showHidden || !t.info.hidden) && matchFilter(t, state.filter);
+function passesFilters(t: Track, bands = true): boolean {
+  return (!bands || state.bands.has(t.info.band)) && (state.showHidden || !t.info.hidden) && matchFilter(t, state.filter);
 }
 
 function visibleTracks(): Track[] {
@@ -50,6 +58,7 @@ function visibleTracks(): Track[] {
 
 function ingest(s: Snapshot) {
   const ts = s.timestampMs;
+  state.scanSeq++;
   // MLO = the OS reports ≥2 connected BSSIDs of one AP MLD (Linux lists every link; macOS/Windows only one)
   const conn = s.bss.filter((b) => b.connected).sort((a, b) => a.freqMhz - b.freqMhz);
   const links = (b: (typeof conn)[0]) => (b.mld ? conn.filter((c) => c.mld === b.mld).length : 1);
@@ -67,7 +76,7 @@ function ingest(s: Snapshot) {
     t.lastSeen = ts;
     t.minRssi = Math.min(t.minRssi, b.rssiDbm);
     t.maxRssi = Math.max(t.maxRssi, b.rssiDbm);
-    t.history.push({ t: ts, rssi: b.rssiDbm });
+    t.history.push({ t: ts, rssi: b.rssiDbm, n: state.scanSeq });
   }
   // keep 60 min of history max
   const cutoff = ts - 3600000;
@@ -109,9 +118,70 @@ function render() {
   if (sel) renderDetails($("details"), sel);
   const cur = rows.filter((t) => t.lastSeen >= state.latestScan).length;
   $("st-count").textContent = `${cur} current / ${rows.length} shown / ${state.tracks.size} total BSS`;
-  $("st-scan").textContent = state.latestScan
+  renderStatus();
+}
+
+function renderStatus() {
+  const scan = state.latestScan
     ? `${state.lastInterface} · scan #${state.scanCount} at ${new Date(state.latestScan).toLocaleTimeString()}${state.running ? "" : " (paused)"}${state.connLabel ? " · " + state.connLabel : ""}`
     : "";
+  $("st-scan").textContent = [scan, state.link && linkText(state.link)].filter(Boolean).join(" · ");
+  const n = state.linkEvents.filter((e) => eventKind(e) === "roam").length;
+  $("st-roams").hidden = !state.linkEvents.length;
+  $("st-roams").textContent = `${n} roam${n === 1 ? "" : "s"}`;
+  if ($<HTMLDialogElement>("dlg-roams").open) renderRoams();
+}
+
+/** Forget the current link (and drop polls in flight): the next answer comes from another radio. */
+function resetLink() {
+  state.link = null;
+  linkGen++;
+  linkKnown = false;
+}
+
+/** Every second, independent of scanning: roaming tests run with scans paused (scans disturb roaming). */
+async function pollLink() {
+  if (linkBusy || !api.isTauri) return;
+  linkBusy = true;
+  const g = linkGen;
+  try {
+    const l = await api.linkInfo(state.iface, state.probe);
+    if (g !== linkGen) return;
+    const ev = linkKnown ? linkChange(state.link, l, Date.now()) : null;
+    if (ev && state.linkEvents.push(ev) > 1000) state.linkEvents.shift();
+    state.link = l;
+    linkKnown = true;
+    renderStatus();
+  } catch {
+    // probe without /link, or a transient failure: keep the last state rather than log a fake disconnect
+  } finally {
+    linkBusy = false;
+  }
+}
+
+/** "hall-1 (aa:bb:…)" from the scanned BSS (or AP MLD) with that address. */
+function apLabel(bssid: string | null): string {
+  if (!bssid) return "";
+  const t = state.tracks.get(bssid) ?? [...state.tracks.values()].find((t) => t.info.mld === bssid);
+  const name = t && (t.info.apName || t.info.ssid);
+  return name ? `${name} (${bssid})` : bssid;
+}
+
+function renderRoams() {
+  const gap = gaps(state.linkEvents);
+  const pair = (a: number | null, b: number | null) => (a == null && b == null ? "" : `${a ?? "–"} → ${b ?? "–"}`);
+  const r = (v: number | null) => (v == null ? null : Math.round(v));
+  $("roams-table").querySelector("tbody")!.innerHTML = state.linkEvents.length
+    ? [...state.linkEvents]
+        .reverse()
+        .map(
+          (e) =>
+            `<tr><td>${new Date(e.t).toLocaleTimeString()}</td><td>${eventKind(e)}</td><td>${esc(apLabel(e.from))}</td><td>${esc(apLabel(e.to))}</td>` +
+            `<td class="num">${pair(e.rssiBefore, e.rssiAfter)}</td><td class="num">${pair(r(e.txBefore), r(e.txAfter))}</td>` +
+            `<td class="num">${gap.has(e) ? (gap.get(e)! / 1000).toFixed(0) + " s" : ""}</td></tr>`,
+        )
+        .join("")
+    : `<tr><td colspan="7">No changes yet.</td></tr>`;
 }
 
 const EMPTY = {
@@ -238,6 +308,7 @@ async function scanOnce() {
     }
   } catch (e) {
     if (g === gen) {
+      state.scanSeq++;
       state.lastError = String(e);
       const x = explain(state.lastError);
       $("st-warn").textContent = x.title;
@@ -263,6 +334,7 @@ function dropScans() {
 
 function setRunning(on: boolean) {
   state.running = on;
+  state.scanSeq++;
   $("btn-run").textContent = on ? "Pause" : "Start";
   window.clearTimeout(timer);
   if (on) {
@@ -318,6 +390,7 @@ function bind() {
       /* per-viewer convenience only */
     }
     state.iface = null;
+    resetLink(); // now, not after loadInterfaces: a poll in between would log local → probe as a roam
     loadInterfaces().then(clearSession);
   };
   $<HTMLSelectElement>("sel-iface").onchange = (e) => {
@@ -565,6 +638,8 @@ function bind() {
         info: t.info,
         history: t.history.map((s) => [s.t, s.rssi]),
       })),
+      link: state.link,
+      linkEvents: state.linkEvents,
     };
     await api.saveFile(`wifisight-${stamp()}.json`, JSON.stringify(data), "json");
   };
@@ -589,6 +664,16 @@ function bind() {
     };
   }
   $("st-update").onclick = () => $<HTMLDialogElement>("dlg-settings").showModal();
+  $("st-roams").onclick = () => {
+    renderRoams();
+    $<HTMLDialogElement>("dlg-roams").showModal();
+  };
+  $("roams-clear").onclick = () => {
+    state.linkEvents = [];
+    renderStatus();
+    renderRoams();
+  };
+  $("roams-csv").onclick = () => api.saveFile(`wifisight-roams-${stamp()}.csv`, eventsCsv(state.linkEvents, apLabel), "csv");
   $("details").addEventListener("click", async (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-act]");
     const act = btn?.dataset.act;
@@ -704,6 +789,7 @@ function clearSession() {
   state.table.selected = null;
   state.lastInterface = "";
   state.connLabel = "";
+  resetLink();
   state.lastError = "";
   $("st-warn").textContent = "";
   dropScans();
@@ -819,7 +905,8 @@ async function init() {
   probeInput.value = state.probe ?? "";
   await loadInterfaces();
   await survey.init({
-    visible: (b) => passesFilters({ info: b } as Track),
+    // Survey picks its band in its own sidebar (the toolbar toggles are hidden there)
+    visible: (b) => passesFilters({ info: b } as Track, false),
     ensureRunning: () => {
       const inFlight = scanning; // a scan started before the click doesn't belong to the new spot
       if (!state.running) setRunning(true);
@@ -831,6 +918,8 @@ async function init() {
   });
   render();
   scanOnce();
+  setInterval(pollLink, 1000);
+  pollLink();
   // on by default; launch only marks the status bar, never prompts
   let autoUpdate = true;
   try {

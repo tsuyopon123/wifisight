@@ -4,6 +4,8 @@
 
 [English](README.md) | 日本語
 
+Web サイト：https://wifisight.tsuyopon.dev/ja/
+
 WiFiSight は、イベント NOC のための Wi-Fi スキャナです。
 会場の事前サーベイから設営後の検証、会期中の監視までを 1 つのツールでこなせます。
 
@@ -59,7 +61,7 @@ macOS、Windows、Linux で動き、解析は共通の `wifi-core` が行うの�
 
 コード署名をしていないため、初回起動時に警告が出ます。
 
-- **macOS**：`.dmg` からアプリケーションフォルダにコピーして起動します。起動できないときは、システム設定 › プライバシーとセキュリティ で「このまま開く」を押してください
+- **macOS**：`.dmg` からアプリケーションフォルダにコピーして起動します。起動できないときは、システム設定 › プライバシーとセキュリティ で「このまま開く」を押してください。Homebrew なら `brew install --cask tsuyopon123/tap/wifisight` でも入ります
 - **Windows**：SmartScreen の画面で「詳細情報」→「実行」を選びます
 - **Linux**：`sudo apt install ./<ファイル名>.deb` でインストールします
 
@@ -68,7 +70,7 @@ macOS、Windows、Linux で動き、解析は共通の `wifi-core` が行うの�
 起動時に新しいリリースを確認し、あればステータスバーの版の隣に「vX available」と表示します。勝手に更新はしません。
 更新するには、設定 › Updates の「Check for updates」を押します。ダウンロードとインストールのあと、アプリを再起動します（Linux では `.deb` のインストールにパスワードを求められます）。
 起動時の確認が不要なら、同じ場所の「Check on launch」をオフにしてください。
-通常は正式版（`-release.N`）だけを対象にします。beta も受け取るなら、同じ場所の「Include beta releases」をオンにしてください。`-portable.exe` では更新せずに Releases ページを開きます。
+通常は正式版（`v0.1.1` のように後ろに何も付かない版）だけを対象にします。beta も受け取るなら、同じ場所の「Include beta releases」をオンにしてください。`-portable.exe` では更新せずに Releases ページを開きます。
 
 ### 権限
 
@@ -153,6 +155,7 @@ macOS の位置情報の権限は `.app` ごとに付与されるため、`npm r
 | `crates/wifi-cli` | CLI（`wifisight-cli`） |
 | `src-tauri` | Tauri のバックエンド |
 | `src` | UI（TypeScript、Canvas） |
+| `site` | Web サイト（静的 HTML。GitHub Pages で公開） |
 
 ### テスト
 
@@ -160,6 +163,7 @@ macOS の位置情報の権限は `.app` ごとに付与されるため、`npm r
 cargo test -p wifi-core -p wifi-scan -p wifi-cli
 npm run check                # UI の自己チェック（src/*.check.ts）
 npm run e2e                  # サーベイ画面を headless Chrome で確認（Chrome が必要。見つからなければ CHROME にパスを設定）
+npm run screenshots          # Web サイトのスクショ（site/img/）をモックデータで撮り直す
 ```
 
 GitHub Actions が macOS、Windows、Ubuntu でテストを実行し、CLI と GUI のバンドルを作ります。

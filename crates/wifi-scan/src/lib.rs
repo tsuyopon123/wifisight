@@ -36,6 +36,9 @@ mod backend {
     pub fn scan(_: &ScanOptions) -> Result<ScanOutput, ScanError> {
         Err(ScanError::Unsupported)
     }
+    pub fn link(_: Option<&str>) -> Result<Option<LinkInfo>, ScanError> {
+        Err(ScanError::Unsupported)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,6 +71,21 @@ pub struct ScanOutput {
     pub warnings: Vec<String>,
 }
 
+/// The link the interface is associated on right now. Fields the OS doesn't expose are `None`
+/// (macOS: no RX rate; Windows: no MCS/NSS).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkInfo {
+    /// AP BSSID (on Linux MLO: the AP MLD address).
+    pub bssid: String,
+    pub ssid: Option<String>,
+    pub rssi_dbm: Option<i32>,
+    pub tx_mbps: Option<f64>,
+    pub rx_mbps: Option<f64>,
+    pub mcs: Option<u8>,
+    pub nss: Option<u8>,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ScanError {
     #[error("no Wi-Fi interface found")]
@@ -86,6 +104,12 @@ pub fn interfaces() -> Result<Vec<Interface>, ScanError> {
 
 pub fn scan(opts: &ScanOptions) -> Result<ScanOutput, ScanError> {
     backend::scan(opts)
+}
+
+/// Current association, `None` when not connected (or the OS hides the BSSID).
+/// Cheap: no scan is triggered, so it can be polled every second.
+pub fn link(interface: Option<&str>) -> Result<Option<LinkInfo>, ScanError> {
+    backend::link(interface)
 }
 
 /// macOS only: ask for Location Services authorisation (no-op elsewhere).

@@ -1,6 +1,6 @@
 // Run: node src/heatmap.check.ts
 import assert from "node:assert/strict";
-import { FLOOR_DBM, apKey, coChannel, estimatePos, idwGrid, layerValue, median, niceLength, secondBest, snrAt } from "./heatmap.ts";
+import { FLOOR_DBM, apKey, coChannel, estimatePos, idwGrid, layerValue, median, nearestGrid, niceLength, secondBest, snrAt, strongest } from "./heatmap.ts";
 
 // grouping
 assert.equal(apKey("00:11:22:33:44:51", null), apKey("00:11:22:33:44:5f", null));
@@ -21,6 +21,18 @@ assert.equal(g[0], -40);
 assert.equal(g[2], -80);
 assert.ok(g[1] > -80 && g[1] < -40);
 assert.ok(Number.isNaN(g[99]));
+
+// nearest: categorical, no blending between samples, masked far away
+const n = nearestGrid([{ x: 5, y: 5, v: 36 }, { x: 25, y: 5, v: 149 }], 100, 1, 10, 30);
+assert.deepEqual([n[0], n[2], n[3]], [36, 149, 149]); // n[1] is a tie
+assert.ok(Number.isNaN(n[99]));
+// a NaN sample (measured, no coverage) keeps its area blank instead of the neighbour's value
+const nb = nearestGrid([{ x: 5, y: 5, v: 36 }, { x: 25, y: 5, v: NaN }], 4, 1, 10, 30);
+assert.equal(nb[0], 36);
+assert.ok(Number.isNaN(nb[2]) && Number.isNaN(nb[3]));
+
+assert.equal(strongest({ a: -70, b: -50, c: -40 }, ["a", "b"]), "b");
+assert.equal(strongest({ a: -70 }, ["z"]), null);
 
 // AP estimate sits next to the strongest point
 const p = estimatePos([
