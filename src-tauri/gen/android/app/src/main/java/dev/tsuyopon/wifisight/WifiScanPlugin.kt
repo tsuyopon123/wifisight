@@ -17,6 +17,7 @@ import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.Executors
 
 /**
  * Wi-Fi scanner for Android. Returns wifi_core::RawBss JSON (BSSID, frequency, RSSI, raw IEs);
@@ -54,8 +55,27 @@ class WifiScanPlugin(private val activity: Activity) : Plugin(activity) {
     @PermissionCallback
     fun permissionStatusCallback(invoke: Invoke) = permissionStatus(invoke)
 
+    /**
+     * Commands run on the UI thread, which also delivers touches to the WebView: reading and
+     * encoding a scan there (twice a second while Rust waits for fresh results) made scrolling lag.
+     */
+    private val worker = Executors.newSingleThreadExecutor()
+
+    private fun background(invoke: Invoke, body: () -> Unit) = worker.execute {
+        try {
+            body()
+        } catch (e: Exception) {
+            invoke.reject(e.toString()) // off the UI thread Tauri doesn't catch it for us
+        }
+    }
+
     @Command
-    fun scan(invoke: Invoke) {
+    fun scan(invoke: Invoke) = background(invoke) { readScan(invoke) }
+
+    @Command
+    fun link(invoke: Invoke) = background(invoke) { readLink(invoke) }
+
+    private fun readScan(invoke: Invoke) {
         if (status() != "authorized") {
             invoke.reject("permission denied: Wi-Fi scanning needs precise location access")
             return
@@ -90,8 +110,7 @@ class WifiScanPlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     /** The current association as wifi_scan::LinkInfo, or null when not connected / redacted. */
-    @Command
-    fun link(invoke: Invoke) {
+    private fun readLink(invoke: Invoke) {
         @Suppress("DEPRECATION")
         val i = wifi.connectionInfo
         val bssid = i?.bssid?.lowercase()
@@ -143,5 +162,9 @@ class WifiScanPlugin(private val activity: Activity) : Plugin(activity) {
         return o
     }
 
-    private fun StringBuilder.hex(v: Int): StringBuilder = append("%02x".format(v and 0xff))
+    private fun StringBuilder.hex(v: Int): StringBuilder = append(HEX[v shr 4 and 15]).append(HEX[v and 15])
+
+    private companion object {
+        const val HEX = "0123456789abcdef"
+    }
 }
