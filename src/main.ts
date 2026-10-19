@@ -370,6 +370,12 @@ function bind() {
     if (localStorage.getItem("wifisight.chartSwiped")) document.body.classList.add("chart-swiped");
   } catch {}
   $("chart-more").onclick = () => chartWrap.scrollBy({ left: chartWrap.clientWidth * 0.8, behavior: "smooth" });
+  // phones: the card list has no header to click
+  $<HTMLSelectElement>("sel-sort").onchange = (e) => {
+    state.table.sortKey = (e.target as HTMLSelectElement).value;
+    state.table.sortAsc = ascFirst(state.table.sortKey);
+    render();
+  };
   $<HTMLSelectElement>("sel-interval").onchange = (e) => {
     state.intervalMs = Number((e.target as HTMLSelectElement).value);
     survey.render(); // time per point depends on it
@@ -444,7 +450,7 @@ function bind() {
       if (state.table.sortKey === k) state.table.sortAsc = !state.table.sortAsc;
       else {
         state.table.sortKey = k;
-        state.table.sortAsc = ["ssid", "bssid", "vendor", "ap", "band", "ch", "sec", "cc"].includes(k);
+        state.table.sortAsc = ascFirst(k);
       }
       render();
       return;
@@ -737,6 +743,9 @@ function bind() {
     }
   });
 }
+
+/** text columns sort A→Z first, numbers strongest / newest first */
+const ascFirst = (k: string) => ["ssid", "bssid", "vendor", "ap", "band", "ch", "sec", "cc"].includes(k);
 
 function setMode(mode: typeof state.mode) {
   state.mode = mode;

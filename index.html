@@ -29,6 +29,17 @@
           <button data-band="5" class="on" aria-pressed="true">5</button>
           <button data-band="6" class="on" aria-pressed="true">6</button>
         </div>
+        <label class="field phone-only">Sort
+          <select id="sel-sort">
+            <option value="rssi" selected>Signal</option>
+            <option value="ssid">SSID</option>
+            <option value="ch">Channel</option>
+            <option value="band">Band</option>
+            <option value="sec">Security</option>
+            <option value="gen">Generation</option>
+            <option value="vendor">Vendor</option>
+          </select>
+        </label>
         <input id="filter" type="search" aria-label="Filter (see Help for the syntax)" placeholder="Filter  ch:36, sec:wpa3, band:6 …" title="Free text matches SSID / BSSID / vendor / AP. Keys: ch: band: sec: ssid: vendor: ap: phy: w: rssi:, comparisons like rssi&lt;-75. Space = AND, comma = OR, ! = NOT. Help (?) lists them all." />
         <label class="check" title="Include networks that hide their SSID"><input type="checkbox" id="chk-hidden" checked /> hidden SSIDs</label>
         <label class="check scanner-only"><input type="checkbox" id="chk-stale" /> only current</label>

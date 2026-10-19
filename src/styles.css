@@ -1338,6 +1338,9 @@ button.icon-label svg {
   .phone-only {
     display: inline-block;
   }
+  .field.phone-only {
+    display: flex;
+  }
   .check:has(#chk-charts) {
     display: none;
   }
