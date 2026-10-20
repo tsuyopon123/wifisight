@@ -14,7 +14,7 @@ interface Col {
 
 const loadPct = (t: Track) => t.info.bssLoad?.channelUtilizationPct ?? -1;
 
-export const COLUMNS: Col[] = [
+const COLUMNS: Col[] = [
   {
     key: "ssid",
     label: "SSID",
@@ -113,7 +113,7 @@ export const COLUMNS: Col[] = [
     },
     text: (t) => [t.info.features.rrm11k ? "k" : "", t.info.features.bssTransition11v ? "v" : "", t.info.features.ft11r ? "r" : ""].join(""),
   },
-  { key: "cc", label: "CC", title: "Country code", sort: (t) => t.info.country ?? "", html: (t) => t.info.country ?? "", text: (t) => t.info.country ?? "" },
+  { key: "cc", label: "CC", title: "Country code", sort: (t) => t.info.country ?? "", html: (t) => esc(t.info.country ?? ""), text: (t) => t.info.country ?? "" },
   {
     key: "seen",
     label: "Last Seen",
@@ -133,7 +133,7 @@ interface Layout {
 const LS_KEY = "wifisight.columns";
 const defaults = (): Layout => ({ order: COLUMNS.map((c) => c.key), hidden: [], widths: {} });
 
-export const layout: Layout = (() => {
+const layout: Layout = (() => {
   const d = defaults();
   try {
     const s = JSON.parse(load(LS_KEY) ?? "null") as Layout | null;

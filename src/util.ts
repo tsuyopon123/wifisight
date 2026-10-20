@@ -52,7 +52,8 @@ export function placeTip(tip: HTMLElement, e: MouseEvent, width: number) {
 export function openColumnPicker(pop: HTMLElement, cols: { key: string; label: string }[], hidden: string[], x: number, y: number, extra = "") {
   pop.innerHTML =
     cols.map((c) => `<label class="check"><input type="checkbox" data-col="${c.key}"${hidden.includes(c.key) ? "" : " checked"} /> ${c.label}</label>`).join("") + extra;
-  pop.hidden = false; // shown first so its width can be measured
+  pop.style.left = "0"; // measure at full width: where it sat last time may have squeezed it
+  pop.hidden = false;
   pop.style.left = `${Math.min(x, innerWidth - pop.offsetWidth - 8)}px`;
   pop.style.top = `${y}px`;
 }

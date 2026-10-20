@@ -39,7 +39,7 @@ enum Cmd {
         #[arg(long)]
         raw: bool,
         /// Sort order
-        #[arg(long, value_enum, default_value_t = Sort::Rssi)]
+        #[arg(long, value_enum, ignore_case = true, default_value_t = Sort::Rssi)]
         sort: Sort,
     },
     /// Scan repeatedly and append JSON Lines (one scan per line)

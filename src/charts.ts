@@ -34,7 +34,8 @@ function setup(canvas: HTMLCanvasElement): Ctx {
   const c = canvas.getContext("2d")!;
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   c.clearRect(0, 0, w, h);
-  const g = cssVar;
+  const v = getComputedStyle(document.documentElement);
+  const g = (k: string) => v.getPropertyValue(k).trim();
   c.font = "11px " + g("--sans");
   return { c, w, h, fg: g("--fg"), fg2: g("--fg-2"), fg3: g("--fg-3"), line: g("--line"), bg3: g("--bg-3"), accent: g("--accent") };
 }

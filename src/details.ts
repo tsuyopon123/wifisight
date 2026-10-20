@@ -7,12 +7,15 @@ const RCOI: [string, string][] = [
   ["001BC50460", "eduroam"],
 ];
 
-function kv(rows: [string, string | number | null | undefined][]): string {
+/** Values are escaped; `{ html }` passes markup through (built from escaped parts by the caller). */
+type Val = string | number | null | undefined | { html: string };
+
+function kv(rows: [string, Val][]): string {
   return (
     `<dl class="kv">` +
     rows
       .filter(([, v]) => v !== null && v !== undefined && v !== "")
-      .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`)
+      .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v && typeof v === "object" ? v.html : esc(String(v))}</dd>`)
       .join("") +
     `</dl>`
   );
@@ -35,7 +38,7 @@ export function renderDetails(el: HTMLElement, t: Track) {
   const rcoi = b.roamingConsortium
     .map((oi) => {
       const l = RCOI.find(([p]) => oi.toUpperCase().startsWith(p));
-      return `${oi}${l ? ` <span style="color:var(--fg-2)">— ${l[1]}</span>` : ""}`;
+      return `${esc(oi)}${l ? ` <span style="color:var(--fg-2)">— ${l[1]}</span>` : ""}`;
     })
     .join("<br>");
 
@@ -90,7 +93,7 @@ export function renderDetails(el: HTMLElement, t: Track) {
       ["Group", s.group],
       ["Group mgmt", s.groupMgmt],
       ["PMF (802.11w)", s.pmf],
-      ["Roaming Consortium", rcoi],
+      ["Roaming Consortium", rcoi && { html: rcoi }],
     ])}
 
     ${
@@ -109,7 +112,7 @@ export function renderDetails(el: HTMLElement, t: Track) {
         (ie) => `<details class="ie" open><summary><span class="id">${ie.id}${ie.extId != null ? "/" + ie.extId : ""}</span><span>${esc(
           ie.name,
         )}</span><span class="len">${ie.length} B</span></summary><div class="body">${
-          ie.fields.length ? kv(ie.fields.map((x) => [x.name, esc(x.value)])) : ""
+          ie.fields.length ? kv(ie.fields.map((x) => [x.name, x.value])) : ""
         }<pre>${ie.hex.replace(/(..)/g, "$1 ").trim()}</pre></div></details>`,
       )
       .join("")}

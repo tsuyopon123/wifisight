@@ -97,10 +97,12 @@ function saveApView() {
 
 type Metric = "signal" | "second" | "snr" | "cci" | "channel";
 
+const SIGNAL_LEGEND = [...SIGNAL_STEPS.map((s) => `≥${s}`), `<${SIGNAL_STEPS[SIGNAL_STEPS.length - 1]}`];
+
 // steps = class boundaries good → bad; `higher` = bigger is better
 const METRICS: Record<Metric, { label: string; unit: string; steps: number[]; higher: boolean; dbm: boolean; legend: string[] }> = {
-  signal: { label: "Signal", unit: "dBm", steps: SIGNAL_STEPS, higher: true, dbm: true, legend: ["≥-60", "≥-67", "≥-75", "≥-82", "<-82"] },
-  second: { label: "2nd AP signal", unit: "dBm", steps: SIGNAL_STEPS, higher: true, dbm: true, legend: ["≥-60", "≥-67", "≥-75", "≥-82", "<-82"] },
+  signal: { label: "Signal", unit: "dBm", steps: SIGNAL_STEPS, higher: true, dbm: true, legend: SIGNAL_LEGEND },
+  second: { label: "2nd AP signal", unit: "dBm", steps: SIGNAL_STEPS, higher: true, dbm: true, legend: SIGNAL_LEGEND },
   snr: { label: "SNR", unit: "dB", steps: [25, 20, 15, 10], higher: true, dbm: false, legend: ["≥25", "≥20", "≥15", "≥10", "<10"] },
   cci: { label: "Co-channel APs", unit: "APs", steps: [0.5, 1.5, 2.5, 3.5], higher: false, dbm: false, legend: ["0", "1", "2", "3", "4+"] },
   // categorical: value = primary channel frequency (MHz, unique across bands), one colour per channel
