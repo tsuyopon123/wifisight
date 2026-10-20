@@ -2,12 +2,13 @@ import * as api from "./api";
 import { ChartView, type Tab } from "./charts";
 import * as survey from "./survey";
 import { detailsText, renderDetails } from "./details";
-import { COLUMNS, layout, moveCol, renderBody, renderHead, resetLayout, saveLayout, sortTracks, toCsv, toggleCol, type TableState } from "./table";
+import { bindColumns, renderBody, renderHead, sortTracks, toCsv, type TableState } from "./table";
 import { eventKind, eventsCsv, gaps, linkChange, linkText } from "./link";
+import { actions, explain } from "./errors";
 import type { Band, LinkEvent, LinkInfo, Snapshot, Track } from "./types";
-import { colorFor, esc, keepFocus, matchFilter } from "./util";
+import { $, colorFor, esc, keepFocus, load, matchFilter, placeTip, save, setHtml, setOn } from "./util";
 
-const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+const ALL_BANDS: Band[] = ["2.4", "5", "6"];
 
 const state = {
   running: true,
@@ -15,7 +16,7 @@ const state = {
   iface: null as string | null,
   probe: null as string | null,
   mode: "scanner" as "scanner" | "survey",
-  bands: new Set<Band>(["2.4", "5", "6"]),
+  bands: new Set<Band>(ALL_BANDS),
   filter: "",
   showHidden: true,
   onlyCurrent: false,
@@ -55,6 +56,8 @@ function visibleTracks(): Track[] {
   );
 }
 
+const selectedTrack = () => (state.table.selected ? state.tracks.get(state.table.selected) : undefined);
+
 function ingest(s: Snapshot) {
   const ts = s.timestampMs;
   state.scanSeq++;
@@ -85,9 +88,14 @@ function ingest(s: Snapshot) {
   state.latestScan = ts;
   state.scanCount++;
   state.lastInterface = s.interface;
-  $("st-warn").textContent = s.warnings.join(" · ");
-  $("st-warn").title = s.warnings.join("\n");
+  setWarning(s.warnings.join(" · "), s.warnings.join("\n"));
   survey.onSnapshot(s);
+}
+
+/** Status-bar warning; `detail` goes in the tooltip. */
+function setWarning(text: string, detail = text) {
+  $("st-warn").textContent = text;
+  $("st-warn").title = detail;
 }
 
 function render() {
@@ -100,7 +108,7 @@ function render() {
   setEmpty(!state.scanCount ? (state.lastError ? "error" : "scanning") : rows.length ? null : state.tracks.size ? "filtered" : "none");
   renderNotice();
   renderChart();
-  const sel = state.table.selected ? state.tracks.get(state.table.selected) : undefined;
+  const sel = selectedTrack();
   $("details").hidden = !sel;
   if (sel) renderDetails($("details"), sel);
   const cur = rows.filter((t) => t.lastSeen >= state.latestScan).length;
@@ -171,70 +179,22 @@ function renderRoams() {
     : `<tr><td colspan="7">No changes yet.</td></tr>`;
 }
 
+const explainErr = (err: string) => explain(err, state.probe ?? "", state.os, api.isProbePage);
+
 const EMPTY = {
   scanning: () => `<p>Scanning…</p>`,
   filtered: () => `<div><p>No BSS matches the current filters.</p><button data-empty="reset" class="primary">Reset filters</button></div>`,
   none: () => `<div><p>No networks found.</p><button data-empty="settings" class="primary">Check probe / interface…</button></div>`,
   error: () => {
-    const x = explain(state.lastError);
+    const x = explainErr(state.lastError);
     return `<div><p class="err-title">${esc(x.title)}</p><p>${esc(x.hint)}</p>${actions(x.act, "data-empty")}<p class="err-raw">${esc(state.lastError)}</p></div>`;
   },
 };
 
-type Act = "settings" | "location" | undefined;
-
-const actions = (act: Act, attr: string) =>
-  act === "location"
-    ? `<div class="acts"><button ${attr}="location" class="primary">Request location access</button><button ${attr}="settings">Settings…</button></div>`
-    : act === "settings"
-      ? `<div class="acts"><button ${attr}="settings" class="primary">Check probe / interface…</button></div>`
-      : "";
-
-/** Turn a backend error into what happened and what to do about it. */
-function explain(err: string): { title: string; hint: string; act?: Act } {
-  const e = err.toLowerCase();
-  if (e.includes("desktop app"))
-    return { title: "Scanning needs the desktop app", hint: "This browser preview can't reach Wi-Fi. Run the app (npm run tauri dev) to scan." };
-  if (e.includes("probe")) {
-    // probe_get: "unreachable" = no connection; "HTTP 500: …" = the probe answered but its scan failed
-    const p = state.probe ?? "";
-    if (/bad response|: http 404:/.test(e))
-      return { title: `${p} isn't a WiFiSight probe`, hint: "Check the address and port, and that it runs a current wifisight-cli serve.", act: "settings" };
-    if (/: http \d{3}:/.test(e))
-      return {
-        title: `Probe ${p} can't scan`,
-        hint: e.includes("permission")
-          ? "The probe needs CAP_NET_ADMIN to scan (the wifisight-probe service grants it) — check the service on the probe."
-          : "Check that Wi-Fi is on at the probe, or pick another interface in Settings.",
-        act: "settings",
-      };
-    return {
-      title: `Can't reach probe ${p}`,
-      hint: api.isProbePage
-        ? "Check that this device can still reach it on the network and that wifisight-cli serve is running there."
-        : "Check that this computer can reach it on the network and that wifisight-cli serve is running there — or clear Probe in Settings to use this computer's Wi-Fi.",
-      act: "settings",
-    };
-  }
-  if (e.includes("permission")) {
-    if (state.os === "macos")
-      return { title: "Location access is off", hint: "macOS only lets apps scan Wi-Fi with Location Services on: System Settings › Privacy & Security › Location Services.", act: "location" };
-    if (state.os === "windows")
-      return { title: "Location access is off", hint: "Windows needs Settings › Privacy & security › Location › “Let desktop apps access your location” to scan Wi-Fi.", act: "settings" };
-    return { title: "Scanning isn't permitted", hint: "Active scans need CAP_NET_ADMIN: sudo setcap cap_net_admin+ep <path to wifisight>, or run NetworkManager.", act: "settings" };
-  }
-  if (e.includes("no wi-fi interface"))
-    return { title: "No Wi-Fi interface found", hint: "Turn Wi-Fi on, or pick another interface or a probe in Settings.", act: "settings" };
-  return { title: "Scan failed", hint: "Retrying every interval. Check that Wi-Fi is on, or pick another interface / probe in Settings.", act: "settings" };
-}
-
-// Only touch the DOM when the content changes, so a focused button keeps focus across scans.
 function setEmpty(kind: keyof typeof EMPTY | null) {
   const el = $("empty");
   el.hidden = !kind;
-  const html = kind ? EMPTY[kind]() : "";
-  if (el.dataset.html !== html) el.innerHTML = html;
-  el.dataset.html = html;
+  setHtml(el, kind ? EMPTY[kind]() : "");
 }
 
 /** Bar under the toolbar: scans failing after they worked, or location access off (macOS hides SSIDs / BSSIDs). */
@@ -242,7 +202,7 @@ function renderNotice() {
   const el = $("notice");
   let html = "";
   if (state.lastError && state.scanCount) {
-    const x = explain(state.lastError);
+    const x = explainErr(state.lastError);
     html = `<p><b>${esc(x.title)}.</b> ${esc(x.hint)} Showing the last good scan.</p>${actions(x.act, "data-notice")}`;
   } else if (state.location === "denied" || state.location === "restricted") {
     html = `<p><b>Location access is off</b> — macOS hides SSIDs and BSSIDs. Turn it on in System Settings › Privacy & Security › Location Services.</p>${actions("location", "data-notice")}`;
@@ -250,25 +210,19 @@ function renderNotice() {
     html = `<p><b>Allow location access</b> so macOS shows SSIDs and BSSIDs.</p>${actions("location", "data-notice")}`;
   }
   el.hidden = !html;
-  if (el.dataset.html !== html) el.innerHTML = html;
-  el.dataset.html = html;
+  setHtml(el, html);
 }
 
 function resetFilters() {
   state.filter = "";
   state.showHidden = true;
   state.onlyCurrent = false;
-  state.bands = new Set<Band>(["2.4", "5", "6"]);
+  state.bands = new Set(ALL_BANDS);
   $<HTMLInputElement>("filter").value = "";
   $<HTMLInputElement>("chk-hidden").checked = true;
   $<HTMLInputElement>("chk-stale").checked = false;
   document.querySelectorAll<HTMLElement>("#band-filter button").forEach((b) => setOn(b, true));
   render();
-}
-
-function setOn(b: Element, on: boolean) {
-  b.classList.toggle("on", on);
-  b.setAttribute("aria-pressed", String(on));
 }
 
 function renderChart() {
@@ -291,9 +245,8 @@ async function scanOnce() {
     if (g === gen) {
       state.scanSeq++;
       state.lastError = String(e);
-      const x = explain(state.lastError);
-      $("st-warn").textContent = x.title;
-      $("st-warn").title = state.lastError;
+      const x = explainErr(state.lastError);
+      setWarning(x.title, state.lastError);
       survey.onScanError(x.title);
     }
   } finally {
@@ -325,9 +278,23 @@ function setRunning(on: boolean) {
   render();
 }
 
+/** One BSS for JSON export: its info plus the signal history as [time, dBm] pairs. */
+const trackJson = (t: Track) => ({ firstSeen: t.firstSeen, lastSeen: t.lastSeen, info: t.info, history: t.history.map((s) => [s.t, s.rssi]) });
+
 // ───────────────────────── events ─────────────────────────
 
 function bind() {
+  bindToolbar();
+  bindTable();
+  bindChart();
+  bindMenu();
+  bindSettings();
+  bindExports();
+  bindKeys();
+}
+
+/** Scan controls, mode switch, source (probe / interface) and the filters. */
+function bindToolbar() {
   $("btn-run").onclick = () => setRunning(!state.running);
   $<HTMLSelectElement>("sel-interval").onchange = (e) => {
     state.intervalMs = Number((e.target as HTMLSelectElement).value);
@@ -343,11 +310,7 @@ function bind() {
   };
   $<HTMLInputElement>("probe").onchange = (e) => {
     state.probe = (e.target as HTMLInputElement).value.trim() || null;
-    try {
-      localStorage.setItem("wifisight.probe", state.probe ?? "");
-    } catch {
-      /* per-viewer convenience only */
-    }
+    save("wifisight.probe", state.probe ?? "");
     state.iface = null;
     resetLink(); // now, not after loadInterfaces: a poll in between would log local → probe as a roam
     loadInterfaces().then(clearSession);
@@ -381,21 +344,21 @@ function bind() {
   const showCharts = (on: boolean) => {
     charts.checked = on;
     $("splitter").hidden = $("bottom").hidden = !on;
-    try {
-      localStorage.setItem("wifisight.charts", on ? "1" : "0");
-    } catch {}
+    save("wifisight.charts", on ? "1" : "0");
   };
-  try {
-    showCharts(localStorage.getItem("wifisight.charts") !== "0");
-  } catch {}
+  showCharts(load("wifisight.charts") !== "0");
   charts.onchange = () => showCharts(charts.checked);
+}
 
-  // table: sort / select / toggle visibility
-  $("bss-table").onclick = (e) => {
+/** BSS table: sort / select / hide from charts, column layout, details pane. */
+function bindTable() {
+  const table = $("bss-table");
+  const resizing = bindColumns(table, $("col-pop"), render);
+  table.onclick = (e) => {
     const target = e.target as HTMLElement;
     const th = target.closest("th");
     if (th) {
-      if (resizing || target.closest(".rz")) return;
+      if (resizing() || target.closest(".rz")) return;
       const k = th.dataset.sort!;
       if (state.table.sortKey === k) state.table.sortAsc = !state.table.sortAsc;
       else {
@@ -415,84 +378,25 @@ function bind() {
     const tr = target.closest<HTMLElement>("tr[data-bssid]");
     if (tr) select(tr.dataset.bssid!);
   };
-
-  // table columns: drag header to reorder, drag its right edge to resize, right-click to show/hide
-  const thead = $("bss-table").querySelector("thead")!;
-  let resizing = false;
-  thead.ondragstart = (e) => {
-    if (resizing) return e.preventDefault();
-    e.dataTransfer!.setData("text/plain", (e.target as HTMLElement).dataset.sort!);
-  };
-  thead.ondragover = (e) => e.preventDefault();
-  thead.ondrop = (e) => {
-    e.preventDefault();
-    const to = (e.target as HTMLElement).closest("th")?.dataset.sort;
-    const from = e.dataTransfer!.getData("text/plain");
-    if (to && from && from !== to) {
-      moveCol(from, to);
-      render();
+  $("details").addEventListener("click", async (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-act]");
+    const act = btn?.dataset.act;
+    const t = selectedTrack();
+    if (act === "copy") {
+      await navigator.clipboard.writeText(detailsText($("details")));
+      btn!.textContent = "Copied";
+      setTimeout(() => (btn!.textContent = "Copy text"), 1500);
+    } else if (act === "close") {
+      select(null);
+    } else if (act === "json" && t) {
+      const name = `bss-${t.info.bssid.replace(/:/g, "")}-${stamp()}.json`;
+      await api.saveFile(name, JSON.stringify(trackJson(t), null, 2), "json");
     }
-  };
-  thead.onmousedown = (e) => {
-    const th = (e.target as HTMLElement).closest(".rz")?.parentElement;
-    if (!th) return;
-    resizing = true;
-    const key = th.dataset.sort!;
-    const x0 = e.clientX, w0 = th.getBoundingClientRect().width;
-    const move = (ev: MouseEvent) => {
-      const w = Math.max(32, Math.round(w0 + ev.clientX - x0));
-      layout.widths[key] = w;
-      // patch the live cells instead of a full render; the next render picks up layout.widths
-      const head = thead.querySelector<HTMLElement>(`th[data-sort="${key}"]`);
-      if (!head) return;
-      const i = [...head.parentElement!.children].indexOf(head) + 1;
-      for (const el of [head, ...$("bss-table").querySelectorAll<HTMLElement>(`tbody td:nth-child(${i})`)]) {
-        el.style.width = el.style.minWidth = el.style.maxWidth = `${w}px`;
-      }
-    };
-    const up = () => {
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", up);
-      saveLayout();
-      setTimeout(() => (resizing = false)); // swallow the click that follows mouseup
-    };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
-  };
-  thead.ondblclick = (e) => {
-    const key = (e.target as HTMLElement).closest(".rz")?.parentElement?.dataset.sort;
-    if (!key) return;
-    delete layout.widths[key];
-    saveLayout();
-    render();
-  };
-  const colPop = $("col-pop");
-  thead.oncontextmenu = (e) => {
-    e.preventDefault();
-    colPop.innerHTML =
-      COLUMNS.map(
-        (c) => `<label class="check"><input type="checkbox" data-col="${c.key}"${layout.hidden.includes(c.key) ? "" : " checked"} /> ${c.label}</label>`,
-      ).join("") + `<hr /><button data-reset>Reset columns</button>`;
-    colPop.style.left = `${Math.min(e.clientX, innerWidth - 200)}px`;
-    colPop.style.top = `${e.clientY}px`;
-    colPop.hidden = false;
-  };
-  colPop.onclick = (e) => {
-    e.stopPropagation();
-    if (!(e.target as HTMLElement).closest("[data-reset]")) return;
-    resetLayout();
-    colPop.hidden = true;
-    render();
-  };
-  colPop.onchange = (e) => {
-    const cb = e.target as HTMLInputElement;
-    toggleCol(cb.dataset.col!);
-    cb.checked = !layout.hidden.includes(cb.dataset.col!); // last visible column can't be hidden
-    render();
-  };
-  document.addEventListener("click", () => (colPop.hidden = true));
+  });
+}
 
-  // tabs
+/** Chart tabs, hover / click on the chart, and the table / chart splitter. */
+function bindChart() {
   $("tabs").onclick = (e) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>("button[data-tab]");
     if (!b) return;
@@ -500,8 +404,6 @@ function bind() {
     document.querySelectorAll("#tabs button[data-tab]").forEach((x) => setOn(x, x === b));
     renderChart();
   };
-
-  // chart hover / click
   const canvas = $<HTMLCanvasElement>("chart");
   const tip = $("tooltip");
   canvas.onmousemove = (e) => {
@@ -512,9 +414,7 @@ function bind() {
     }
     tip.innerHTML = h.html;
     tip.hidden = false;
-    const w = canvas.clientWidth;
-    tip.style.left = `${Math.min(e.offsetX + 14, w - tip.offsetWidth - 6)}px`;
-    tip.style.top = `${Math.max(4, e.offsetY - tip.offsetHeight - 10)}px`;
+    placeTip(tip, e, canvas.clientWidth);
   };
   canvas.onmouseleave = () => (tip.hidden = true);
   canvas.onclick = (e) => {
@@ -523,7 +423,6 @@ function bind() {
   };
   new ResizeObserver(() => renderChart()).observe(canvas.parentElement!);
 
-  // splitter
   const main = $("main");
   $("splitter").onpointerdown = (e) => {
     e.preventDefault(); // no text selection while dragging
@@ -536,16 +435,20 @@ function bind() {
     };
     el.onpointerup = () => (el.onpointermove = null);
   };
+}
 
-  // menu
-  const pop = $("menu-pop");
+const menuOpen = () => !$("menu-pop").hidden;
+
+function setMenu(open: boolean) {
+  $("menu-pop").hidden = !open;
+  $("btn-menu").setAttribute("aria-expanded", String(open));
+}
+
+/** ☰ menu, the empty-state / notice buttons, help, theme. */
+function bindMenu() {
   $("btn-menu").onclick = (e) => {
     e.stopPropagation();
-    setMenu(pop.hidden);
-  };
-  const setMenu = (open: boolean) => {
-    pop.hidden = !open;
-    $("btn-menu").setAttribute("aria-expanded", String(open));
+    setMenu(!menuOpen());
   };
   document.addEventListener("click", () => setMenu(false));
   $("empty").onclick = (e) => {
@@ -572,30 +475,19 @@ function bind() {
   // "Follow system": CSS switches by itself; BSS colours are computed per theme, so redo them
   window.matchMedia?.("(prefers-color-scheme: light)").addEventListener("change", () => {
     if (document.documentElement.dataset.theme) return;
-    for (const tr of state.tracks.values()) tr.color = colorFor(tr.info.bssid);
+    recolor();
     render();
   });
-  $("btn-csv").onclick = async () => {
-    const rows = sortTracks(visibleTracks(), state.table);
-    await api.saveFile(`wifisight-${stamp()}.csv`, toCsv(rows), "csv");
-  };
-  $("btn-json").onclick = async () => {
-    const data = {
-      app: "wifisight",
-      exportedAt: new Date().toISOString(),
-      interface: state.lastInterface,
-      tracks: [...state.tracks.values()].map((t) => ({
-        firstSeen: t.firstSeen,
-        lastSeen: t.lastSeen,
-        info: t.info,
-        history: t.history.map((s) => [s.t, s.rssi]),
-      })),
-      link: state.link,
-      linkEvents: state.linkEvents,
-    };
-    await api.saveFile(`wifisight-${stamp()}.json`, JSON.stringify(data), "json");
-  };
-  $("btn-settings").onclick = () => $<HTMLDialogElement>("dlg-settings").showModal();
+  const dlg = $<HTMLDialogElement>("dlg-clear");
+  $("btn-clear").onclick = () => dlg.showModal();
+  dlg.onclose = () => dlg.returnValue === "ok" && clearSession();
+}
+
+/** Settings dialog: OUI database, location, updates; and the status-bar shortcuts into it. */
+function bindSettings() {
+  const open = () => $<HTMLDialogElement>("dlg-settings").showModal();
+  $("btn-settings").onclick = open;
+  $("st-update").onclick = open;
   $("btn-oui").onclick = async () => {
     const st = $("oui-status");
     st.textContent = "Downloading IEEE OUI registry…";
@@ -609,13 +501,27 @@ function bind() {
   $("btn-loc").onclick = () => requestLocation();
   $("btn-update").onclick = () => checkForUpdate(true);
   for (const [id, key] of [["chk-autoupdate", "wifisight.autoUpdate"], ["chk-beta", "wifisight.beta"]]) {
-    $<HTMLInputElement>(id).onchange = (e) => {
-      try {
-        localStorage.setItem(key, (e.target as HTMLInputElement).checked ? "1" : "0");
-      } catch {}
-    };
+    $<HTMLInputElement>(id).onchange = (e) => save(key, (e.target as HTMLInputElement).checked ? "1" : "0");
   }
-  $("st-update").onclick = () => $<HTMLDialogElement>("dlg-settings").showModal();
+}
+
+/** CSV / JSON exports and the roaming log. */
+function bindExports() {
+  $("btn-csv").onclick = async () => {
+    const rows = sortTracks(visibleTracks(), state.table);
+    await api.saveFile(`wifisight-${stamp()}.csv`, toCsv(rows), "csv");
+  };
+  $("btn-json").onclick = async () => {
+    const data = {
+      app: "wifisight",
+      exportedAt: new Date().toISOString(),
+      interface: state.lastInterface,
+      tracks: [...state.tracks.values()].map(trackJson),
+      link: state.link,
+      linkEvents: state.linkEvents,
+    };
+    await api.saveFile(`wifisight-${stamp()}.json`, JSON.stringify(data), "json");
+  };
   $("st-roams").onclick = () => {
     renderRoams();
     $<HTMLDialogElement>("dlg-roams").showModal();
@@ -626,25 +532,9 @@ function bind() {
     renderRoams();
   };
   $("roams-csv").onclick = () => api.saveFile(`wifisight-roams-${stamp()}.csv`, eventsCsv(state.linkEvents, apLabel), "csv");
-  $("details").addEventListener("click", async (e) => {
-    const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-act]");
-    const act = btn?.dataset.act;
-    const t = state.table.selected ? state.tracks.get(state.table.selected) : undefined;
-    if (act === "copy") {
-      await navigator.clipboard.writeText(detailsText($("details")));
-      btn!.textContent = "Copied";
-      setTimeout(() => (btn!.textContent = "Copy text"), 1500);
-    } else if (act === "close") {
-      select(null);
-    } else if (act === "json" && t) {
-      const name = `bss-${t.info.bssid.replace(/:/g, "")}-${stamp()}.json`;
-      await api.saveFile(name, JSON.stringify({ firstSeen: t.firstSeen, lastSeen: t.lastSeen, info: t.info, history: t.history.map((s) => [s.t, s.rssi]) }, null, 2), "json");
-    }
-  });
-  const dlg = $<HTMLDialogElement>("dlg-clear");
-  $("btn-clear").onclick = () => dlg.showModal();
-  dlg.onclose = () => dlg.returnValue === "ok" && clearSession();
+}
 
+function bindKeys() {
   document.addEventListener("keydown", (e) => {
     const t = e.target as HTMLElement;
     if (document.querySelector("dialog[open]")) return;
@@ -666,16 +556,15 @@ function bind() {
     if (e.key === "?") return $("btn-help").click();
     if (state.mode !== "scanner") return;
     if (e.key === "v") {
-      const sel = state.table.selected ? state.tracks.get(state.table.selected) : undefined;
+      const sel = selectedTrack();
       if (sel) {
         sel.hidden = !sel.hidden;
         render();
       }
     } else if (e.key === "Escape") {
-      if (!pop.hidden) setMenu(false);
+      if (menuOpen()) setMenu(false);
       else select(null);
-    }
-    else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       const rows = sortTracks(visibleTracks(), state.table);
       const i = rows.findIndex((t) => t.info.bssid === state.table.selected);
@@ -705,18 +594,18 @@ function applyTheme(t: string) {
   else delete document.documentElement.dataset.theme;
 }
 
+/** BSS colours are computed for the current theme: redo them after it changes. */
+function recolor() {
+  for (const tr of state.tracks.values()) tr.color = colorFor(tr.info.bssid);
+}
+
 function setTheme(t: string) {
   applyTheme(t);
   $<HTMLSelectElement>("sel-theme").value = t;
-  try {
-    localStorage.setItem("wifisight.theme", t);
-  } catch {
-    /* per-viewer convenience only */
-  }
-  for (const tr of state.tracks.values()) tr.color = colorFor(tr.info.bssid);
+  save("wifisight.theme", t);
+  recolor();
   render();
 }
-
 
 async function requestLocation() {
   await api.requestLocation();
@@ -755,8 +644,7 @@ async function loadInterfaces() {
       `<option value="">(default)</option>` + ifs.map((i) => `<option value="${esc(i.id)}">${esc(i.name)}${i.mac ? " — " + esc(i.mac) : ""}</option>`).join("");
   } catch (e) {
     $("sel-iface").innerHTML = `<option value="">${api.hasBackend ? "(none found)" : "(desktop app only)"}</option>`;
-    $("st-warn").textContent = explain(String(e)).title;
-    $("st-warn").title = String(e);
+    setWarning(explainErr(String(e)).title, String(e));
   }
 }
 
@@ -851,12 +739,8 @@ async function init() {
   if (api.isTauri && !info.ouiEntries) $("btn-oui").click(); // first run: fetch vendor DB without making the user hunt for it
   const probeInput = $<HTMLInputElement>("probe");
   probeInput.disabled = !api.isTauri;
-  try {
-    // the probe page always talks to the probe that served it
-    state.probe = api.isProbePage ? location.host : (api.isTauri && localStorage.getItem("wifisight.probe")) || null;
-  } catch {
-    state.probe = null;
-  }
+  // the probe page always talks to the probe that served it
+  state.probe = api.isProbePage ? location.host : (api.isTauri && load("wifisight.probe")) || null;
   probeInput.value = state.probe ?? "";
   await loadInterfaces();
   await survey.init({
@@ -876,11 +760,8 @@ async function init() {
   setInterval(pollLink, 1000);
   pollLink();
   // on by default; launch only marks the status bar, never prompts
-  let autoUpdate = true;
-  try {
-    autoUpdate = localStorage.getItem("wifisight.autoUpdate") !== "0";
-    $<HTMLInputElement>("chk-beta").checked = localStorage.getItem("wifisight.beta") === "1"; // off by default
-  } catch {}
+  const autoUpdate = load("wifisight.autoUpdate") !== "0";
+  $<HTMLInputElement>("chk-beta").checked = load("wifisight.beta") === "1"; // off by default
   $<HTMLInputElement>("chk-autoupdate").checked = autoUpdate;
   if (api.isTauri && autoUpdate) checkForUpdate(false);
   // refresh "last seen" ages and the time axis between scans
@@ -889,9 +770,5 @@ async function init() {
   }, 1000);
 }
 
-try {
-  applyTheme(localStorage.getItem("wifisight.theme") ?? "");
-} catch {
-  /* follow the OS */
-}
+applyTheme(load("wifisight.theme") ?? "");
 init();

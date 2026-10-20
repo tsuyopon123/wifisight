@@ -12,7 +12,7 @@ function kv(rows: [string, string | number | null | undefined][]): string {
     `<dl class="kv">` +
     rows
       .filter(([, v]) => v !== null && v !== undefined && v !== "")
-      .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${typeof v === "number" ? v : v}</dd>`)
+      .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`)
       .join("") +
     `</dl>`
   );

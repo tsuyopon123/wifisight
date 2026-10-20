@@ -1,5 +1,5 @@
 import type { Band, Sample, Track } from "./types";
-import { ssidLabel, withAlpha } from "./util";
+import { cssVar, esc, ssidLabel, withAlpha } from "./util";
 
 export type Tab = "signal" | "2.4" | "5" | "6" | "load";
 
@@ -34,8 +34,7 @@ function setup(canvas: HTMLCanvasElement): Ctx {
   const c = canvas.getContext("2d")!;
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   c.clearRect(0, 0, w, h);
-  const v = getComputedStyle(document.documentElement);
-  const g = (k: string) => v.getPropertyValue(k).trim();
+  const g = cssVar;
   c.font = "11px " + g("--sans");
   return { c, w, h, fg: g("--fg"), fg2: g("--fg-2"), fg3: g("--fg-3"), line: g("--line"), bg3: g("--bg-3"), accent: g("--accent") };
 }
@@ -167,7 +166,7 @@ export class ChartView {
           }
           return best < 12 ? best : Infinity;
         },
-        hit: { bssid: t.info.bssid, html: `<b>${escapeHtml(ssidLabel(t.info))}</b><br>${t.info.bssid} · ch ${t.info.channel}<br>${t.info.rssiDbm} dBm (min ${t.minRssi} / max ${t.maxRssi})` },
+        hit: { bssid: t.info.bssid, html: `<b>${esc(ssidLabel(t.info))}</b><br>${t.info.bssid} · ch ${t.info.channel}<br>${t.info.rssiDbm} dBm (min ${t.minRssi} / max ${t.maxRssi})` },
       });
     }
     c.restore();
@@ -255,7 +254,7 @@ export class ChartView {
         test: (mx, my) => (mx >= lo && mx <= hi && my >= top - 2 && my <= floor ? my - top : Infinity),
         hit: {
           bssid: b.bssid,
-          html: `<b>${escapeHtml(ssidLabel(b))}</b><br>${b.bssid}<br>ch ${b.channel} · ${b.widthMhz} MHz (center ${b.centerChannel})<br>${b.rssiDbm} dBm · ${b.security.label}`,
+          html: `<b>${esc(ssidLabel(b))}</b><br>${b.bssid}<br>ch ${b.channel} · ${b.widthMhz} MHz (center ${b.centerChannel})<br>${b.rssiDbm} dBm · ${b.security.label}`,
         },
       });
     }
@@ -286,9 +285,9 @@ export class ChartView {
       c.fillStyle = x.fg2;
       c.textAlign = "left";
       c.textBaseline = "top";
-      c.font = "600 11px " + getComputedStyle(document.documentElement).getPropertyValue("--sans");
+      c.font = "600 11px " + cssVar("--sans");
       c.fillText(`${band} GHz`, 6, y0 + 2);
-      c.font = "10px " + getComputedStyle(document.documentElement).getPropertyValue("--sans");
+      c.font = "10px " + cssVar("--sans");
       c.fillStyle = x.fg3;
       c.fillText("util %", 6, y0 + 16);
       if (bi === 0) {
@@ -323,10 +322,6 @@ export class ChartView {
       });
     });
   }
-}
-
-function escapeHtml(s: string) {
-  return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
 }
 
 const BAND_RANGE = { "2.4": [2398, 2496], "5": [5150, 5895], "6": [5925, 7125] } as const;

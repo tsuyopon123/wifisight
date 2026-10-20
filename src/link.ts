@@ -42,6 +42,7 @@ export function gaps(events: LinkEvent[]): Map<LinkEvent, number> {
 }
 
 export function eventsCsv(events: LinkEvent[], name: (bssid: string | null) => string): string {
+  // same as util.csvCell; not imported because link.check.ts runs this file directly in Node
   const q = (v: unknown) => {
     const s = v == null ? "" : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
