@@ -15,7 +15,9 @@ const singleFile: Plugin = {
     for (const [name, chunk] of Object.entries(bundle)) {
       if (name === "index.html") continue;
       const code = chunk.type === "chunk" ? chunk.code : String(chunk.source);
-      const esc = code.replace(/<\/(script|style)/gi, "<\\/$1");
+      // `</script` ends the element early; `<!--` + `<script` would keep it open past `</script>`.
+      // Both only occur inside JS strings / regexes, where `\/` and `\x21` (= "!") read the same.
+      const esc = code.replace(/<\/(script|style)/gi, "<\\/$1").replace(/<!--/g, "<\\x21--");
       const before = out;
       // function replacers: the minified code may contain `$&` etc.
       out = out

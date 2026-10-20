@@ -51,6 +51,7 @@ Linux を推奨する。
    デバイスの起動時にも Probe として動く。
    更新は新しい `.deb` を同じように入れる。
    待ち受けるアドレスを変えるときは `sudo systemctl edit wifisight-probe` で `ExecStart` を上書きする。
+   上書きでは、先に空の `ExecStart=` 行で元の値を消してから新しい `ExecStart=` を書く（消さないと `ExecStart` が 2 つになり、サービスが起動しない）。
 
    以前の手順で `/etc/systemd/system/wifisight-probe.service` を自分で作った場合は、そちらが優先されるので削除してから `sudo systemctl daemon-reload` する。
 
@@ -87,7 +88,15 @@ iPad など GUI を入れられない端末では、ブラウザで `http://<hos
 iPadOS / Safari 16.2 以降が必要である。
 アップデートと OUI DB のダウンロードはデスクトップ版だけの機能で、ブラウザでは使えない。
 サーベイの自動保存はブラウザの localStorage（Safari では約 5 MB）に入るので、大きな間取り図を使うときは Save… で保存する。
-ベンダー名を出すには、IEEE の [oui.csv](https://standards-oui.ieee.org/oui/oui.csv) を誰でも読める場所（例: `/usr/local/share/wifisight/oui.csv`）に置き、`sudo systemctl edit wifisight-probe` で `ExecStart` に `--oui` を足す（例: `ExecStart=/usr/bin/wifisight-cli --oui /usr/local/share/wifisight/oui.csv serve --listen 0.0.0.0:8737`）。
+自動保存は開いたアドレスごとに分かれる（`wifiprobe.local:8737` と IP アドレスで開いたときは別扱い）ので、いつも同じアドレスで開く。
+ベンダー名を出すには、IEEE の [oui.csv](https://standards-oui.ieee.org/oui/oui.csv) を誰でも読める場所（例: `/usr/local/share/wifisight/oui.csv`）に置き、`sudo systemctl edit wifisight-probe` で `ExecStart` に `--oui` を足す。
+
+```ini
+[Service]
+ExecStart=
+ExecStart=/usr/bin/wifisight-cli --oui /usr/local/share/wifisight/oui.csv serve --listen 0.0.0.0:8737
+```
+
 unit は `DynamicUser=yes` で動くので、ホームディレクトリなどに置くと読めない（読めないときは起動ログに warning が出る）。
 
 Probe の応答は CLI からも確認できる。
