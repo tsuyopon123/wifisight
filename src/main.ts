@@ -1,5 +1,5 @@
 import * as api from "./api";
-import { ChartView, type Tab } from "./charts";
+import { ChartView, PAD, type Tab } from "./charts";
 import * as survey from "./survey";
 import { detailsText, renderDetails } from "./details";
 import { COLUMNS, layout, moveCol, renderBody, renderHead, resetLayout, saveLayout, sortTracks, toCsv, toggleCol, type TableState } from "./table";
@@ -14,7 +14,8 @@ const state = {
   intervalMs: 0,
   iface: null as string | null,
   probe: null as string | null,
-  mode: "scanner" as "scanner" | "survey",
+  // channels: phone-only view of the channel charts (the scanner table hides them on narrow screens)
+  mode: "scanner" as "scanner" | "channels" | "survey",
   bands: new Set<Band>(["2.4", "5", "6"]),
   filter: "",
   showHidden: true,
@@ -90,8 +91,20 @@ function ingest(s: Snapshot) {
   survey.onSnapshot(s);
 }
 
+// A full redraw costs ~80 ms on a phone; landing mid-scroll it stutters the list, so it waits for the scroll to settle.
+let scrolledAt = 0;
+let deferred = 0;
+
 function render() {
+  const since = performance.now() - scrolledAt;
+  if (since < 400) {
+    window.clearTimeout(deferred);
+    deferred = window.setTimeout(render, 400 - since);
+    return;
+  }
   survey.render();
+  // phones: flag a narrowed list while the controls are tucked behind ☰
+  $("btn-more").classList.toggle("filtered", !!state.filter.trim() || state.bands.size < 3 || !state.showHidden || state.onlyCurrent);
   const rows = sortTracks(visibleTracks(), state.table);
   const now = Date.now();
   const thead = $("bss-table").querySelector("thead")!;
@@ -185,7 +198,7 @@ type Act = "settings" | "location" | undefined;
 
 const actions = (act: Act, attr: string) =>
   act === "location"
-    ? `<div class="acts"><button ${attr}="location" class="primary">Request location access</button><button ${attr}="settings">Settings…</button></div>`
+    ? `<div class="acts"><button ${attr}="location" class="primary">${state.os === "android" ? "Allow Wi-Fi scanning" : "Request location access"}</button><button ${attr}="settings">Settings…</button></div>`
     : act === "settings"
       ? `<div class="acts"><button ${attr}="settings" class="primary">Check probe / interface…</button></div>`
       : "";
@@ -217,6 +230,8 @@ function explain(err: string): { title: string; hint: string; act?: Act } {
   if (e.includes("permission")) {
     if (state.os === "macos")
       return { title: "Location access is off", hint: "macOS only lets apps scan Wi-Fi with Location Services on: System Settings › Privacy & Security › Location Services.", act: "location" };
+    if (state.os === "android")
+      return { title: "Wi-Fi scan permission is off", hint: "Android only scans Wi-Fi with precise location access: allow it, or turn it on in Settings › Apps › WiFiSight › Permissions › Location (Use precise location on).", act: "location" };
     if (state.os === "windows")
       return { title: "Location access is off", hint: "Windows needs Settings › Privacy & security › Location › “Let desktop apps access your location” to scan Wi-Fi.", act: "settings" };
     return { title: "Scanning isn't permitted", hint: "Active scans need CAP_NET_ADMIN: sudo setcap cap_net_admin+ep <path to wifisight>, or run NetworkManager.", act: "settings" };
@@ -242,6 +257,10 @@ function renderNotice() {
   if (state.lastError && state.scanCount) {
     const x = explain(state.lastError);
     html = `<p><b>${esc(x.title)}.</b> ${esc(x.hint)} Showing the last good scan.</p>${actions(x.act, "data-notice")}`;
+  } else if (state.os === "android" && state.location === "denied") {
+    html = `<p><b>Wi-Fi scan permission is off.</b> Turn on Location with “Use precise location” in Settings › Apps › WiFiSight › Permissions.</p>`;
+  } else if (state.os === "android" && state.location === "notDetermined") {
+    html = `<p><b>Allow Wi-Fi scanning</b> — Android only scans with precise location access.</p>${actions("location", "data-notice")}`;
   } else if (state.location === "denied" || state.location === "restricted") {
     html = `<p><b>Location access is off</b> — macOS hides SSIDs and BSSIDs. Turn it on in System Settings › Privacy & Security › Location Services.</p>${actions("location", "data-notice")}`;
   } else if (state.location === "notDetermined") {
@@ -270,8 +289,23 @@ function setOn(b: Element, on: boolean) {
 }
 
 function renderChart() {
+  if (!$("chart").clientWidth) return; // hidden: phones show it only in the Channels view
   chart.draw(state.tab, visibleTracks(), state.table.selected, Date.now(), state.historyMs, state.latestScan);
+  // phones scroll the wide 5 / 6 GHz charts sideways: a copy of the dBm axis stays pinned at the left
+  const axis = $<HTMLCanvasElement>("chart-axis");
+  if (axis.clientWidth) {
+    const src = $<HTMLCanvasElement>("chart");
+    axis.width = Math.round((PAD.l * src.width) / src.clientWidth);
+    axis.height = src.height;
+    axis.getContext("2d")!.drawImage(src, 0, 0, axis.width, axis.height, 0, 0, axis.width, axis.height);
+  }
   $("history-field").style.visibility = state.tab === "signal" ? "visible" : "hidden";
+  chartAtEnd();
+}
+
+function chartAtEnd() {
+  const w = $("chart").parentElement!;
+  $("chart-pane").classList.toggle("at-end", w.scrollLeft + w.clientWidth >= w.scrollWidth - 4);
 }
 
 async function scanOnce() {
@@ -315,6 +349,7 @@ function setRunning(on: boolean) {
   state.running = on;
   state.scanSeq++;
   $("btn-run").textContent = on ? "Pause" : "Start";
+  $("btn-run").classList.toggle("live", on);
   window.clearTimeout(timer);
   if (on) {
     dropScans(); // the user may have moved while paused
@@ -327,6 +362,34 @@ function setRunning(on: boolean) {
 
 function bind() {
   $("btn-run").onclick = () => setRunning(!state.running);
+  for (const el of [$("table-wrap"), $("chart").parentElement!])
+    el.addEventListener("scroll", () => (scrolledAt = performance.now()), { passive: true });
+  // phones: the › on the wide 5 / 6 GHz charts says there's more to the right (and scrolls there);
+  // its "Swipe for more" hint goes once the user has scrolled a chart
+  const chartWrap = $("chart").parentElement!;
+  chartWrap.addEventListener(
+    "scroll",
+    () => {
+      chartAtEnd();
+      if (chartWrap.scrollLeft > 0 && !document.body.classList.contains("chart-swiped")) {
+        document.body.classList.add("chart-swiped");
+        try {
+          localStorage.setItem("wifisight.chartSwiped", "1");
+        } catch {}
+      }
+    },
+    { passive: true },
+  );
+  try {
+    if (localStorage.getItem("wifisight.chartSwiped")) document.body.classList.add("chart-swiped");
+  } catch {}
+  $("chart-more").onclick = () => chartWrap.scrollBy({ left: chartWrap.clientWidth * 0.8, behavior: "smooth" });
+  // phones: the card list has no header to click
+  $<HTMLSelectElement>("sel-sort").onchange = (e) => {
+    state.table.sortKey = (e.target as HTMLSelectElement).value;
+    state.table.sortAsc = ascFirst(state.table.sortKey);
+    render();
+  };
   $<HTMLSelectElement>("sel-interval").onchange = (e) => {
     state.intervalMs = Number((e.target as HTMLSelectElement).value);
     survey.render(); // time per point depends on it
@@ -337,7 +400,10 @@ function bind() {
   };
   $("mode-seg").onclick = (e) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>("button[data-mode]");
-    if (b) setMode(b.dataset.mode as typeof state.mode);
+    if (!b) return;
+    // phones: details covers the list, so Scanner means "back to the list"
+    if (b.dataset.mode === "scanner" && phone()) state.table.selected = null;
+    setMode(b.dataset.mode as typeof state.mode);
   };
   $<HTMLInputElement>("probe").onchange = (e) => {
     state.probe = (e.target as HTMLInputElement).value.trim() || null;
@@ -398,7 +464,7 @@ function bind() {
       if (state.table.sortKey === k) state.table.sortAsc = !state.table.sortAsc;
       else {
         state.table.sortKey = k;
-        state.table.sortAsc = ["ssid", "bssid", "vendor", "ap", "band", "ch", "sec", "cc"].includes(k);
+        state.table.sortAsc = ascFirst(k);
       }
       render();
       return;
@@ -495,6 +561,8 @@ function bind() {
     const b = (e.target as HTMLElement).closest<HTMLElement>("button[data-tab]");
     if (!b) return;
     state.tab = b.dataset.tab as Tab;
+    $("chart-pane").dataset.tab = state.tab; // phones: the 5 / 6 GHz charts are wider than the screen
+    $("chart").parentElement!.scrollLeft = 0; // each band starts at its lowest channel
     document.querySelectorAll("#tabs button[data-tab]").forEach((x) => setOn(x, x === b));
     renderChart();
   };
@@ -564,6 +632,11 @@ function bind() {
     renderNotice();
   }, 1000);
   $("btn-help").onclick = () => $<HTMLDialogElement>("dlg-help").showModal();
+  // phones: the toolbar shows only the mode switch until ☰ opens the rest
+  $("btn-more").onclick = () => {
+    const open = document.body.classList.toggle("more-open");
+    $("btn-more").setAttribute("aria-expanded", String(open));
+  };
   const theme = $<HTMLSelectElement>("sel-theme");
   theme.value = document.documentElement.dataset.theme ?? "";
   theme.onchange = () => setTheme(theme.value);
@@ -662,7 +735,7 @@ function bind() {
       return setRunning(!state.running);
     }
     if (e.key === "?") return $("btn-help").click();
-    if (state.mode !== "scanner") return;
+    if (state.mode === "survey") return;
     if (e.key === "v") {
       const sel = state.table.selected ? state.tracks.get(state.table.selected) : undefined;
       if (sel) {
@@ -685,14 +758,20 @@ function bind() {
   });
 }
 
+/** text columns sort A→Z first, numbers strongest / newest first */
+const ascFirst = (k: string) => ["ssid", "bssid", "vendor", "ap", "band", "ch", "sec", "cc"].includes(k);
+
 function setMode(mode: typeof state.mode) {
   state.mode = mode;
   document.querySelectorAll<HTMLElement>("#mode-seg button").forEach((x) => setOn(x, x.dataset.mode === mode));
   document.body.classList.toggle("mode-survey", mode === "survey");
-  $("main").hidden = mode !== "scanner";
+  document.body.classList.toggle("mode-channels", mode === "channels");
+  $("main").hidden = mode === "survey";
   $("survey").hidden = mode !== "survey";
   survey.setActive(mode === "survey");
-  if (mode === "scanner") render();
+  // the channels view has no room for the signal history: open on a band chart
+  if (mode === "channels" && state.tab === "signal") $("tabs").querySelector<HTMLElement>('button[data-tab="2.4"]')!.click();
+  if (mode !== "survey") render();
 }
 
 const THEMES = ["", "dark", "light"]; // "" = follow the OS
@@ -722,6 +801,37 @@ async function requestLocation() {
   renderNotice();
   $("btn-run").title = state.running && state.lastError ? "Scanning, but every scan is failing — see the message above (Space pauses)" : "Start / pause scanning (Space)";
 }
+
+const phone = () => matchMedia("(max-width: 720px)").matches;
+
+// phones: Android's back gesture walks the WebView history (no history = the app closes). While a layer is open
+// (a dialog, the ☰ controls, details, Channels / Survey) one entry stands for it, and going back closes the top one.
+function backLayer(): (() => void) | null {
+  const dlg = document.querySelector<HTMLDialogElement>("dialog[open]");
+  if (dlg) return () => dlg.close();
+  if (document.body.classList.contains("more-open")) return () => $("btn-more").click();
+  if (state.table.selected && state.mode === "scanner") return () => select(null);
+  if (state.mode !== "scanner")
+    return () => {
+      state.table.selected = null;
+      setMode("scanner");
+    };
+  return null;
+}
+
+function syncBack() {
+  if (!phone()) return;
+  const open = !!backLayer();
+  if (open && !history.state?.layer) history.pushState({ layer: true }, "");
+  else if (!open && history.state?.layer) history.back(); // its popstate finds nothing left to close
+}
+
+window.addEventListener("popstate", () => {
+  backLayer()?.();
+  syncBack();
+});
+// layers open and close on clicks and keys (Esc); capture sees them even where a handler stops propagation
+for (const type of ["click", "keydown", "close"]) document.addEventListener(type, () => setTimeout(syncBack), true);
 
 function select(bssid: string | null, scroll = false) {
   state.table.selected = state.table.selected === bssid && !scroll ? null : bssid;

@@ -213,18 +213,49 @@ export function sortTracks(list: Track[], st: TableState): Track[] {
   });
 }
 
+// What each live cell / row was last rendered with, so a scan only touches what changed.
+const cellHtml = new WeakMap<Element, string>();
+const rowCols = new WeakMap<Element, string>();
+
+/**
+ * Patch the rows in place: keep each BSSID's <tr>, rewrite only the cells whose content changed
+ * (usually signal and last seen) and move rows only when the order changed. Rebuilding the whole
+ * list every scan made scrolling stutter on phones.
+ */
 export function renderBody(tbody: HTMLElement, rows: Track[], st: TableState, now: number, latestScan: number) {
   const cols = visibleCols();
-  tbody.innerHTML = rows
-    .map((t) => {
-      const cls = [t.info.bssid === st.selected ? "sel" : "", t.lastSeen < latestScan ? "stale" : ""].join(" ");
-      return (
-        `<tr data-bssid="${t.info.bssid}" class="${cls}">` +
-        cols.map((c) => `<td class="${c.num ? "num" : ""} ${c.mono ? "mono" : ""}"${widthStyle(c)}>${c.html(t, now)}</td>`).join("") +
-        "</tr>"
-      );
-    })
-    .join("");
+  const colKey = cols.map((c) => c.key + widthStyle(c)).join();
+  const old = new Map<string, HTMLElement>();
+  for (const tr of tbody.children as HTMLCollectionOf<HTMLElement>) old.set(tr.dataset.bssid!, tr);
+  let prev: Element | null = null;
+  for (const t of rows) {
+    let tr = old.get(t.info.bssid);
+    if (tr) old.delete(t.info.bssid);
+    else {
+      tr = document.createElement("tr");
+      tr.dataset.bssid = t.info.bssid;
+    }
+    const cls = [t.info.bssid === st.selected ? "sel" : "", t.lastSeen < latestScan ? "stale" : ""].join(" ");
+    if (tr.className !== cls) tr.className = cls;
+    const html = cols.map((c) => c.html(t, now));
+    if (rowCols.get(tr) !== colKey) {
+      tr.innerHTML = cols.map((c, i) => `<td data-k="${c.key}" class="${c.num ? "num" : ""} ${c.mono ? "mono" : ""}"${widthStyle(c)}>${html[i]}</td>`).join("");
+      rowCols.set(tr, colKey);
+      html.forEach((h, i) => cellHtml.set(tr!.children[i], h));
+    } else {
+      html.forEach((h, i) => {
+        const td = tr!.children[i];
+        if (cellHtml.get(td) !== h) {
+          td.innerHTML = h;
+          cellHtml.set(td, h);
+        }
+      });
+    }
+    const at: Element | null = prev ? prev.nextElementSibling : tbody.firstElementChild;
+    if (at !== tr) tbody.insertBefore(tr, at);
+    prev = tr;
+  }
+  for (const tr of old.values()) tr.remove();
 }
 
 export function toCsv(rows: Track[]): string {

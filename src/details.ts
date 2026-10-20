@@ -22,7 +22,7 @@ function chip(label: string, on: boolean, title = ""): string {
   return `<span class="chip${on ? " on" : ""}" title="${esc(title)}">${label}</span>`;
 }
 
-const ACTIONS = `<div class="d-actions"><button data-act="copy">Copy text</button><button data-act="json">Export JSON…</button><button data-act="close" title="Close (Esc)" aria-label="Close details">×</button></div>`;
+const ACTIONS = `<div class="d-actions"><button data-act="copy">Copy text</button><button data-act="json">Export JSON…</button><button data-act="close" title="Close (Esc)" aria-label="Close details"><svg class="i-close" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg><svg class="i-back" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button></div>`;
 
 export function renderDetails(el: HTMLElement, t: Track) {
   // Don't wipe a text selection the user is making/copying; resumes once it's cleared.

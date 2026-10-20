@@ -72,6 +72,13 @@ try {
   await send("Page.addScriptToEvaluateOnNewDocument", { source: MOCK });
   await send("Page.navigate", { url: base });
   await waitFor("window.__mock && window.__mock.scans > 0", 15000);
+
+  // scanner table: a new scan patches the row in place instead of rebuilding the list
+  await ev(`window.__row = document.querySelector("#bss-table tbody tr"); window.__mock.rssi.en0 = -61`);
+  await waitFor(`document.querySelector('#bss-table tbody td[data-k="rssi"]').textContent.startsWith("-61")`);
+  check("T1 new scan keeps the row element", await ev(`document.querySelector("#bss-table tbody tr") === window.__row`), true);
+  await ev(`window.__mock.rssi.en0 = -50`);
+
   await ev(`document.querySelector('#mode-seg button[data-mode="survey"]').click()`);
   await ev(`(async () => {
     const c = document.createElement("canvas");

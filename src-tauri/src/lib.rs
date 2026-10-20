@@ -4,18 +4,27 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Manager, State};
 use tauri_plugin_dialog::DialogExt;
+#[cfg(desktop)]
 use tauri_plugin_updater::UpdaterExt;
 use wifi_core::{analyze, BssInfo, OuiDb};
-use wifi_scan::{Interface, LinkInfo, ScanOptions};
+use wifi_scan::{Interface, LinkInfo};
 
 const OUI_URL: &str = "https://standards-oui.ieee.org/oui/oui.csv";
 /// Published releases, newest first, pre-releases included (drafts are hidden without auth).
+#[cfg(desktop)]
 const RELEASES_API: &str =
     "https://api.github.com/repos/tsuyopon123/wifisight/releases?per_page=20";
 
+/// Managed on the builder, not in setup(): on Android the page can call commands before setup() runs.
+#[derive(Default)]
 struct AppState {
     oui: Arc<Mutex<Option<OuiDb>>>,
-    data_dir: PathBuf,
+}
+
+fn data_dir(app: &tauri::AppHandle) -> PathBuf {
+    app.path()
+        .app_data_dir()
+        .unwrap_or_else(|_| std::env::temp_dir().join("wifisight"))
 }
 
 #[derive(Serialize)]
@@ -46,14 +55,22 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+// async: on Android the location status comes from the Kotlin plugin, which runs on the UI thread
 #[tauri::command]
-fn platform_info(app: tauri::AppHandle, state: State<'_, AppState>) -> PlatformInfo {
-    PlatformInfo {
+async fn platform_info(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<PlatformInfo, String> {
+    #[cfg(target_os = "android")]
+    let location_status = Some(android::permission_status(&app).await?);
+    #[cfg(not(target_os = "android"))]
+    let location_status = wifi_scan::location_permission_status();
+    Ok(PlatformInfo {
         os: std::env::consts::OS,
         arch: std::env::consts::ARCH,
         // tauri.conf version: CI sets it from the tag (e.g. 0.1.0-beta.3); Cargo stays 0.1.0
         version: app.package_info().version.to_string(),
-        location_status: wifi_scan::location_permission_status(),
+        location_status,
         oui_entries: state
             .oui
             .lock()
@@ -61,9 +78,11 @@ fn platform_info(app: tauri::AppHandle, state: State<'_, AppState>) -> PlatformI
             .as_ref()
             .map(|d| d.len())
             .unwrap_or(0),
-        installable: !cfg!(windows)
-            || std::env::current_exe().is_ok_and(|p| p.with_file_name("uninstall.exe").exists()),
-    }
+        installable: cfg!(desktop)
+            && (!cfg!(windows)
+                || std::env::current_exe()
+                    .is_ok_and(|p| p.with_file_name("uninstall.exe").exists())),
+    })
 }
 
 /// GET JSON from an external probe (`wifisight-cli serve`). `probe` is "host:port" or a URL.
@@ -108,6 +127,9 @@ async fn probe_info(probe: String) -> Result<serde_json::Value, String> {
 async fn list_interfaces(probe: Option<String>) -> Result<Vec<Interface>, String> {
     tauri::async_runtime::spawn_blocking(move || match probe.filter(|p| !p.trim().is_empty()) {
         Some(p) => probe_get(&p, "/interfaces"),
+        #[cfg(target_os = "android")]
+        None => Ok(vec![android::interface()]),
+        #[cfg(not(target_os = "android"))]
         None => wifi_scan::interfaces().map_err(|e| e.to_string()),
     })
     .await
@@ -135,11 +157,15 @@ fn iface_query(iface: Option<String>) -> String {
 /// Current link of the interface (local or on the probe); polled every second, no scan.
 #[tauri::command]
 async fn link_info(
+    #[allow(unused_variables)] app: tauri::AppHandle,
     iface: Option<String>,
     probe: Option<String>,
 ) -> Result<Option<LinkInfo>, String> {
     tauri::async_runtime::spawn_blocking(move || match probe.filter(|p| !p.trim().is_empty()) {
         Some(p) => probe_get(&p, &format!("/link{}", iface_query(iface))),
+        #[cfg(target_os = "android")]
+        None => android::link(&app),
+        #[cfg(not(target_os = "android"))]
         None => wifi_scan::link(iface.as_deref()).map_err(|e| e.to_string()),
     })
     .await
@@ -148,6 +174,7 @@ async fn link_info(
 
 #[tauri::command]
 async fn scan(
+    #[allow(unused_variables)] app: tauri::AppHandle,
     state: State<'_, AppState>,
     iface: Option<String>,
     probe: Option<String>,
@@ -159,7 +186,11 @@ async fn scan(
             let o: wifi_scan::ScanOutput = probe_get(&p, &format!("/scan{}", iface_query(iface)))?;
             (format!("probe:{}", o.interface), o.bss, o.warnings)
         } else {
-            let o = wifi_scan::scan(&ScanOptions {
+            // blocking pool, not the UI thread, so waiting on the Kotlin plugin is fine
+            #[cfg(target_os = "android")]
+            let o = android::scan(&app)?;
+            #[cfg(not(target_os = "android"))]
+            let o = wifi_scan::scan(&wifi_scan::ScanOptions {
                 interface: iface,
                 trigger: true,
                 wait: false,
@@ -182,8 +213,8 @@ async fn scan(
 
 /// Download the IEEE OUI registry into the app data dir and load it.
 #[tauri::command]
-async fn update_oui_db(state: State<'_, AppState>) -> Result<usize, String> {
-    let path = state.data_dir.join("oui.csv");
+async fn update_oui_db(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<usize, String> {
+    let path = data_dir(&app).join("oui.csv");
     let oui = state.oui.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let text = ureq::get(OUI_URL)
@@ -211,6 +242,7 @@ async fn update_oui_db(state: State<'_, AppState>) -> Result<usize, String> {
     .map_err(|e| e.to_string())?
 }
 
+#[cfg(desktop)]
 /// latest.json of the newest published release, betas included. The stable channel instead
 /// uses the configured releases/latest endpoint, which skips pre-releases.
 fn beta_manifest_url() -> Result<tauri::Url, String> {
@@ -244,6 +276,7 @@ fn beta_manifest_url() -> Result<tauri::Url, String> {
     url.parse().map_err(|e| format!("{url}: {e}"))
 }
 
+#[cfg(desktop)]
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct UpdateMetadata {
@@ -257,6 +290,7 @@ struct UpdateMetadata {
 
 /// The updater plugin's `check` with a beta channel added (its JS `check()` can't change the
 /// endpoint). Returns what the JS `Update` class takes, so download/install stay the plugin's.
+#[cfg(desktop)]
 #[tauri::command]
 async fn check_update(
     webview: tauri::Webview,
@@ -291,10 +325,10 @@ fn save_with_dialog(
     ext: &str,
     contents: &[u8],
 ) -> Result<Option<String>, String> {
-    let Some(path) = window
-        .dialog()
-        .file()
-        .set_parent(window)
+    let dialog = window.dialog().file();
+    #[cfg(desktop)]
+    let dialog = dialog.set_parent(window);
+    let Some(path) = dialog
         .set_file_name(name)
         .add_filter(ext.to_uppercase(), &[ext])
         .blocking_save_file()
@@ -302,9 +336,27 @@ fn save_with_dialog(
     else {
         return Ok(None);
     };
-    let path = path.into_path().map_err(|e| e.to_string())?;
-    std::fs::write(&path, contents).map_err(|e| e.to_string())?;
-    Ok(Some(path.display().to_string()))
+    // Android hands back a content:// URI, which only the fs plugin can open
+    #[cfg(target_os = "android")]
+    {
+        use std::io::Write;
+        use tauri_plugin_fs::{FsExt, OpenOptions};
+        let mut opts = OpenOptions::new();
+        opts.write(true).truncate(true).create(true); // "wt": plain "w" may leave a longer old file's tail
+        let shown = path.to_string();
+        window
+            .fs()
+            .open(path, opts)
+            .and_then(|mut f| f.write_all(contents))
+            .map_err(|e| e.to_string())?;
+        Ok(Some(shown))
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let path = path.into_path().map_err(|e| e.to_string())?;
+        std::fs::write(&path, contents).map_err(|e| e.to_string())?;
+        Ok(Some(path.display().to_string()))
+    }
 }
 
 #[tauri::command]
@@ -329,43 +381,166 @@ async fn save_bytes(
 
 /// Survey autosave in the app data dir, so a long walk survives a crash / reload.
 #[tauri::command]
-fn autosave_write(state: State<'_, AppState>, contents: String) -> Result<(), String> {
-    let _ = std::fs::create_dir_all(&state.data_dir);
-    let path = state.data_dir.join("survey-autosave.json");
+fn autosave_write(app: tauri::AppHandle, contents: String) -> Result<(), String> {
+    let dir = data_dir(&app);
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("survey-autosave.json");
     let tmp = path.with_extension("tmp");
     std::fs::write(&tmp, contents).map_err(|e| e.to_string())?;
     std::fs::rename(tmp, path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn autosave_read(state: State<'_, AppState>) -> Option<String> {
-    std::fs::read_to_string(state.data_dir.join("survey-autosave.json")).ok()
+fn autosave_read(app: tauri::AppHandle) -> Option<String> {
+    std::fs::read_to_string(data_dir(&app).join("survey-autosave.json")).ok()
 }
 
 #[tauri::command]
-fn request_location(app: tauri::AppHandle) -> Result<(), String> {
+async fn request_location(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    return android::request_access(&app).await;
+    #[cfg(not(target_os = "android"))]
     app.run_on_main_thread(wifi_scan::request_location_permission)
         .map_err(|e| e.to_string())
 }
 
+/// Wi-Fi scanning through the Kotlin plugin in gen/android (WifiScanPlugin.kt), which returns
+/// `RawBss` like the desktop backends in wifi-scan.
+#[cfg(target_os = "android")]
+mod android {
+    use serde::{Deserialize, Serialize};
+    use std::sync::atomic::{AtomicI64, Ordering};
+    use std::time::{Duration, Instant};
+    use tauri::plugin::{Builder, PluginHandle, TauriPlugin};
+    use tauri::{AppHandle, Manager, Wry};
+    use wifi_scan::{Interface, LinkInfo, ScanOutput};
+
+    struct Scanner(PluginHandle<Wry>);
+
+    pub fn init() -> TauriPlugin<Wry> {
+        Builder::new("wifiscan")
+            .setup(|app, api| {
+                let h = api.register_android_plugin("dev.tsuyopon.wifisight", "WifiScanPlugin")?;
+                app.manage(Scanner(h));
+                Ok(())
+            })
+            .build()
+    }
+
+    /// Android exposes no interface choice to apps.
+    pub fn interface() -> Interface {
+        Interface {
+            id: "wlan0".into(),
+            name: "wlan0".into(),
+            description: "Wi-Fi".into(),
+            mac: None,
+        }
+    }
+
+    /// Newest result timestamp handed out so far (µs since boot).
+    static LAST_SCAN: AtomicI64 = AtomicI64::new(0);
+
+    /// Triggers a scan and waits for its results. Android keeps returning the previous list until
+    /// its own scan lands (a few seconds), so returning at once would hand the UI the same list
+    /// every 300 ms (redrawing it for nothing) and count one scan as many survey samples.
+    /// Blocks: never call on the UI thread.
+    pub fn scan(app: &AppHandle) -> Result<ScanOutput, String> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Out {
+            bss: Vec<wifi_core::RawBss>,
+            warnings: Vec<String>,
+            newest_us: i64,
+        }
+        #[derive(Serialize)]
+        struct Args {
+            trigger: bool,
+        }
+        let plugin = &app.state::<Scanner>().0;
+        let call = |trigger| {
+            plugin
+                .run_mobile_plugin::<Out>("scan", Args { trigger })
+                .map_err(|e| e.to_string())
+        };
+        let start = Instant::now();
+        // the trigger call's warnings (throttled, location off) are the ones that matter
+        let Out { mut bss, mut warnings, mut newest_us } = call(true)?;
+        // ponytail: fixed 10 s cap; a throttled radio returns its cached list after it, with a warning
+        while !bss.is_empty() && newest_us <= LAST_SCAN.load(Ordering::Relaxed) {
+            if start.elapsed() > Duration::from_secs(10) {
+                warnings.push("no new scan results in 10 s: showing the previous ones".into());
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(500));
+            Out { bss, newest_us, .. } = call(false)?;
+        }
+        LAST_SCAN.fetch_max(newest_us, Ordering::Relaxed);
+        Ok(ScanOutput {
+            interface: "wlan0".into(),
+            bss,
+            warnings,
+        })
+    }
+
+    /// Current association; MCS / NSS stay None (Android doesn't expose them). Blocks like scan().
+    pub fn link(app: &AppHandle) -> Result<Option<LinkInfo>, String> {
+        #[derive(Deserialize)]
+        struct Out {
+            link: Option<LinkInfo>,
+        }
+        app.state::<Scanner>()
+            .0
+            .run_mobile_plugin::<Out>("link", ())
+            .map(|o| o.link)
+            .map_err(|e| e.to_string())
+    }
+
+    #[derive(Deserialize)]
+    struct Status {
+        status: String,
+    }
+
+    /// authorized / denied / notDetermined, like the macOS backend.
+    pub async fn permission_status(app: &AppHandle) -> Result<String, String> {
+        let s: Status = app
+            .state::<Scanner>()
+            .0
+            .run_mobile_plugin_async("permissionStatus", ())
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(s.status)
+    }
+
+    pub async fn request_access(app: &AppHandle) -> Result<(), String> {
+        app.state::<Scanner>()
+            .0
+            .run_mobile_plugin_async::<Status>("requestAccess", ())
+            .await
+            .map(drop)
+            .map_err(|e| e.to_string())
+    }
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
+    let builder = tauri::Builder::default();
+    #[cfg(desktop)]
+    let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_process::init());
+    #[cfg(target_os = "android")]
+    let builder = builder
+        .plugin(tauri_plugin_fs::init())
+        .plugin(android::init());
+    builder
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .manage(AppState::default())
         .setup(|app| {
-            let data_dir = app
-                .path()
-                .app_data_dir()
-                .unwrap_or_else(|_| std::env::temp_dir().join("wifisight"));
-            let oui = std::fs::read_to_string(data_dir.join("oui.csv"))
+            let oui = std::fs::read_to_string(data_dir(app.handle()).join("oui.csv"))
                 .ok()
                 .map(|t| OuiDb::from_ieee_csv(&t));
-            app.manage(AppState {
-                oui: Arc::new(Mutex::new(oui)),
-                data_dir,
-            });
+            *app.state::<AppState>().oui.lock().unwrap() = oui;
             // macOS: SSID/BSSID are redacted without Location Services. setup() runs on the main thread.
             wifi_scan::request_location_permission();
             Ok(())
@@ -382,6 +557,7 @@ pub fn run() {
             save_bytes,
             autosave_read,
             request_location,
+            #[cfg(desktop)]
             check_update
         ])
         .run(tauri::generate_context!())

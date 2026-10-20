@@ -10,6 +10,7 @@
   --danger: #be2323;
   --danger-fg: #ffffff;
   /* z-index scale */
+  --chart-font: 11px; /* canvas labels */
   --z-sticky: 10;
   --z-tooltip: 20;
   --z-pop: 30;
@@ -97,6 +98,11 @@ summary:focus-visible,
 tr[tabindex]:focus-visible,
 li[tabindex]:focus-visible {
   outline-offset: -2px;
+}
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"] {
+  accent-color: var(--accent);
 }
 ::placeholder {
   color: var(--fg-3);
@@ -343,6 +349,9 @@ input[type="search"] {
 .canvas-wrap {
   position: relative;
   min-height: 0;
+}
+#chart-axis {
+  display: none; /* phones: pinned dBm axis over the sideways-scrolling 5 / 6 GHz charts */
 }
 #chart {
   position: absolute;
@@ -1274,6 +1283,24 @@ button.icon-label {
   align-items: center;
   gap: 5px;
 }
+#mode-seg svg,
+#details .i-back {
+  display: none;
+}
+#details [data-act="close"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#details [data-act="close"] svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 button.icon-label svg {
   width: 14px;
   height: 14px;
@@ -1308,4 +1335,509 @@ button.icon-label svg {
 }
 #dlg-help code {
   font: 12px var(--mono);
+}
+
+.phone-only {
+  display: none;
+}
+
+/* ── phones (the Android build): bigger type and targets, the BSS table as two-line cards, channel
+   charts in their own view (Channels), details covering the list, the survey side panel under the plan ── */
+@media (max-width: 720px) {
+  :root {
+    --base: 15px;
+    --chart-font: 13px;
+  }
+  button,
+  select,
+  input[type="search"] {
+    min-height: 40px;
+    padding: 6px 12px;
+  }
+  .check input {
+    width: 20px;
+    height: 20px;
+  }
+  .phone-only {
+    display: inline-block;
+  }
+  .field.phone-only {
+    display: flex;
+  }
+  .check:has(#chk-charts) {
+    display: none;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:hover {
+    border-color: var(--line-2); /* touch leaves :hover stuck on the last button tapped */
+  }
+  button:active {
+    background: color-mix(in srgb, var(--fg) 10%, var(--bg-3));
+  }
+  button.primary:active {
+    background: color-mix(in srgb, var(--fg) 18%, var(--accent));
+  }
+  #table-wrap,
+  #details,
+  #sv-side {
+    overscroll-behavior: contain;
+  }
+
+  /* top bar: filter, Pause / Start and ☰; ☰ opens the other controls below it, two to a row */
+  .toolbar {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 8px;
+    padding: 8px 12px;
+  }
+  .tb-main,
+  .tb-end {
+    display: contents;
+  }
+  #filter {
+    order: 0;
+    flex: 1 1 calc(100% - 180px); /* leaves Pause and ☰ on this row; everything after wraps */
+    min-width: 0;
+    max-width: none;
+    border-radius: 999px;
+    padding-inline: 16px;
+    background: var(--bg-3);
+    border-color: transparent;
+  }
+  #btn-run {
+    order: 1;
+    min-width: 0;
+    border-radius: 999px;
+    padding-inline: 16px;
+  }
+  #btn-more {
+    order: 2;
+    position: relative;
+    justify-content: center;
+    width: 44px;
+    padding: 0;
+    border-radius: 999px;
+  }
+  #btn-more svg {
+    width: 20px;
+    height: 20px;
+    color: var(--fg);
+  }
+  .field:has(#sel-interval) {
+    order: 3;
+  }
+  .field:has(#sel-sort) {
+    order: 4;
+  }
+  .field:has(#sel-interval),
+  .field:has(#sel-sort),
+  .toolbar .check {
+    flex: 1 1 40%;
+  }
+  .toolbar .field select {
+    flex: 1;
+    min-width: 0;
+  }
+  #band-filter {
+    order: 5;
+    flex: 1 1 100%;
+  }
+  #band-filter button {
+    flex: 1;
+  }
+  .toolbar .check {
+    order: 6;
+    min-height: 40px;
+  }
+  .tb-end > * {
+    order: 7;
+    flex: 1 1 28%; /* a row of their own: the checkboxes' row has no 28% left */
+    justify-content: center;
+  }
+  .tb-end .menu > button {
+    width: 100%;
+  }
+  body:not(.more-open) .toolbar > :is(.tb-main, .tb-end) > :not(#mode-seg, #filter, #btn-run) {
+    display: none !important;
+  }
+  #btn-more.filtered::after {
+    content: "";
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--bg-3);
+  }
+  .more-open #btn-more {
+    background: var(--sel);
+    border-color: var(--accent);
+  }
+  .more-open .toolbar {
+    box-shadow: 0 6px 16px -8px rgba(0, 0, 0, 0.35);
+    z-index: var(--z-pop);
+  }
+  /* scanning: a dot breathes on Pause */
+  #btn-run.live {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #btn-run.live::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  body.mode-survey #btn-run.live::before {
+    background: var(--good);
+  }
+
+  /* modes: a bottom navigation bar within thumb reach */
+  body {
+    padding-bottom: 64px;
+  }
+  #mode-seg {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: var(--z-pop);
+    height: 64px;
+    border: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 0;
+    background: var(--bg-2);
+  }
+  #mode-seg button {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--fg-3);
+    font-size: 12.5px;
+    font-weight: 500;
+  }
+  #mode-seg svg {
+    display: block;
+    box-sizing: content-box;
+    width: 22px;
+    height: 22px;
+    padding: 4px 20px;
+    border-radius: 999px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  #mode-seg button.on {
+    color: var(--fg);
+    font-weight: 600;
+  }
+  #mode-seg button.on svg {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    color: var(--accent);
+  }
+  #mode-seg button:active svg {
+    background: var(--hover);
+  }
+
+  /* Scanner = the list, Channels = the charts, one at a time */
+  #main,
+  #main:has(> #bottom[hidden]) {
+    grid-template-rows: minmax(0, 1fr);
+  }
+  #splitter,
+  body:not(.mode-channels) #bottom,
+  body.mode-channels #table-wrap,
+  #tabs button[data-tab="signal"],
+  #history-field {
+    display: none !important;
+  }
+  body.mode-channels #bottom {
+    display: grid !important;
+  }
+  /* 5 / 6 GHz don't fit a phone's width: draw them wider and scroll sideways (~37 px per 20 MHz) */
+  body.mode-channels .canvas-wrap {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  #chart-pane[data-tab="5"] #chart {
+    width: 1400px;
+  }
+  #chart-pane[data-tab="6"] #chart {
+    width: 1600px;
+  }
+  #chart-pane > .canvas-wrap {
+    grid-area: 2 / 1; /* shares its cell with #chart-more instead of being pushed to a new row */
+  }
+  #chart-more {
+    display: none;
+  }
+  #chart-pane:is([data-tab="5"], [data-tab="6"]):not(.at-end) #chart-more {
+    display: flex;
+  }
+  #chart-more {
+    grid-row: 2;
+    grid-column: 1;
+    align-self: center;
+    justify-self: end;
+    z-index: 2;
+    align-items: center;
+    gap: 8px;
+    margin-right: 8px;
+    min-height: 0;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--line-2);
+    background: color-mix(in srgb, var(--bg-2) 88%, transparent);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    font-size: 26px;
+    line-height: 1;
+  }
+  #chart-more .hint {
+    font-size: 13.5px;
+    color: var(--fg-2);
+  }
+  .chart-swiped #chart-more .hint {
+    display: none;
+  }
+  #chart-pane:is([data-tab="5"], [data-tab="6"]) #chart-axis {
+    display: block;
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    width: 44px; /* PAD.l in charts.ts */
+    height: 100%;
+    background: var(--bg);
+    pointer-events: none;
+  }
+  .tabs button {
+    padding: 10px 14px;
+  }
+
+  /* BSS cards: SSID + signal, then AP name / band / channel / security, then BSSID / vendor */
+  #bss-table,
+  #bss-table tbody {
+    display: block;
+  }
+  #bss-table thead {
+    display: none;
+  }
+  #bss-table tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 3px 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    color: var(--fg-2);
+    font-size: 13.5px;
+  }
+  #bss-table tr {
+    background: transparent; /* no zebra on cards */
+  }
+  #bss-table tr.sel {
+    background: var(--sel);
+  }
+  #bss-table tr:active {
+    background: var(--hover);
+  }
+  #bss-table tr::before,
+  #bss-table tr::after {
+    content: "";
+    flex-basis: 100%; /* line breaks */
+  }
+  #bss-table tr::before {
+    order: 2;
+  }
+  #bss-table tr::after {
+    order: 5;
+  }
+  #bss-table td {
+    display: none;
+    padding: 0;
+    border: 0 !important; /* the desktop column dividers */
+    width: auto !important; /* column widths from the desktop layout */
+    min-width: 0 !important;
+    max-width: none !important;
+    font-size: inherit;
+  }
+  #bss-table td:empty {
+    display: none !important;
+  }
+  #bss-table td[data-k="ssid"] {
+    display: block;
+    order: 0;
+    flex: 1 1 0;
+    color: var(--fg);
+    font-size: 17px;
+    font-weight: 600;
+  }
+  #bss-table td[data-k="rssi"] {
+    display: block;
+    order: 1;
+    color: var(--fg);
+    font-size: 17px;
+    font-weight: 600;
+  }
+  #bss-table .swatch {
+    min-height: 0;
+    padding: 0;
+  }
+  #bss-table td[data-k="rssi"] .bar span {
+    width: 56px;
+    height: 8px;
+  }
+  #bss-table td[data-k="ap"] {
+    display: block;
+    order: 3;
+    color: var(--fg);
+    font-weight: 600;
+  }
+  #bss-table td:is([data-k="band"], [data-k="ch"], [data-k="width"], [data-k="sec"], [data-k="gen"]) {
+    display: block;
+    order: 4;
+  }
+  #bss-table td[data-k="band"]::after {
+    content: " GHz";
+  }
+  #bss-table td[data-k="ch"] {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+  #bss-table td[data-k="ch"]::before {
+    content: "ch";
+  }
+  #bss-table td[data-k="ch"] .tag {
+    order: 1; /* "ch 56 DFS" */
+  }
+  #bss-table td[data-k="width"] span {
+    display: none; /* center channel */
+  }
+  #bss-table td[data-k="width"]::after {
+    content: " MHz";
+  }
+  #bss-table td:is([data-k="bssid"], [data-k="vendor"]) {
+    display: block;
+    order: 6;
+    font-size: 13px;
+  }
+  .tag {
+    font-size: 12.5px;
+  }
+  .conn {
+    font-size: 12px;
+  }
+
+  /* details covers the list (it has its own × and Export JSON) */
+  #main {
+    position: relative;
+  }
+  #main:has(> #details:not([hidden])) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #details {
+    position: absolute;
+    grid-area: auto; /* else column 2 (zero wide here) is its containing block */
+    inset: 0;
+    z-index: calc(var(--z-sticky) + 1); /* over the table's sticky header */
+    border-left: 0;
+  }
+  #details {
+    padding-top: 0;
+  }
+  #details .d-actions {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    align-items: center;
+    margin: 0 -14px 10px;
+    padding: 8px 12px;
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--line);
+  }
+  #details [data-act="close"] {
+    order: -1;
+    margin-right: auto;
+    width: 44px;
+    padding: 0;
+    border-color: transparent;
+    background: transparent;
+    border-radius: 999px;
+  }
+  #details [data-act="close"] svg {
+    width: 22px;
+    height: 22px;
+  }
+  #details .i-close {
+    display: none;
+  }
+  #details .i-back {
+    display: block;
+  }
+  body.mode-channels #details {
+    display: none; /* the selection stays highlighted on the chart */
+  }
+  #details h2 {
+    font-size: 19px;
+  }
+  #details .sub,
+  table.mini {
+    font-size: 13.5px;
+  }
+  #details h3,
+  .chip,
+  details.ie summary .id,
+  details.ie summary .len {
+    font-size: 13px;
+  }
+  details.ie pre {
+    font-size: 12.5px;
+  }
+
+  /* survey: the side panel goes under the plan */
+  #survey {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 45%);
+  }
+  #sv-splitter {
+    display: none;
+  }
+  #sv-side {
+    border-top: 1px solid var(--line);
+  }
+  #sv-side h4,
+  .sv-h button {
+    font-size: 13px;
+  }
+  #sv-aps,
+  .field.small,
+  .tooltip {
+    font-size: 13.5px;
+  }
+  .sv-hint {
+    font-size: 14px;
+  }
+
+  .statusbar > span:first-child {
+    display: none; /* platform / version: Android shows the version in its app info */
+  }
+  .statusbar {
+    flex-wrap: wrap;
+    gap: 2px 12px;
+    font-size: 13px;
+  }
 }

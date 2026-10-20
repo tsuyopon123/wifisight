@@ -1,0 +1,170 @@
+package dev.tsuyopon.wifisight
+
+import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.location.LocationManager
+import android.net.wifi.ScanResult
+import android.net.wifi.WifiManager
+import android.os.SystemClock
+import app.tauri.PermissionState
+import app.tauri.annotation.Command
+import app.tauri.annotation.Permission
+import app.tauri.annotation.PermissionCallback
+import app.tauri.annotation.TauriPlugin
+import app.tauri.plugin.Invoke
+import app.tauri.plugin.JSObject
+import app.tauri.plugin.Plugin
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.concurrent.Executors
+
+/**
+ * Wi-Fi scanner for Android. Returns wifi_core::RawBss JSON (BSSID, frequency, RSSI, raw IEs);
+ * all interpretation happens in Rust, like the desktop backends in crates/wifi-scan.
+ */
+@TauriPlugin(
+    permissions = [
+        // scans need precise location on every version; NEARBY_WIFI_DEVICES alone gets empty results
+        Permission(strings = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION], alias = "location"),
+    ]
+)
+class WifiScanPlugin(private val activity: Activity) : Plugin(activity) {
+    private val wifi get() = activity.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+
+    private val alias = "location"
+
+    /** Same vocabulary as the macOS backend: authorized / denied / notDetermined. */
+    private fun status() = when (getPermissionState(alias)) {
+        PermissionState.GRANTED -> "authorized"
+        PermissionState.DENIED -> "denied"
+        else -> "notDetermined"
+    }
+
+    @Command
+    fun permissionStatus(invoke: Invoke) {
+        invoke.resolve(JSObject().apply { put("status", status()) })
+    }
+
+    @Command
+    fun requestAccess(invoke: Invoke) {
+        if (status() == "authorized") permissionStatus(invoke)
+        else requestPermissionForAlias(alias, invoke, "permissionStatusCallback")
+    }
+
+    @PermissionCallback
+    fun permissionStatusCallback(invoke: Invoke) = permissionStatus(invoke)
+
+    /**
+     * Commands run on the UI thread, which also delivers touches to the WebView: reading and
+     * encoding a scan there (twice a second while Rust waits for fresh results) made scrolling lag.
+     */
+    private val worker = Executors.newSingleThreadExecutor()
+
+    private fun background(invoke: Invoke, body: () -> Unit) = worker.execute {
+        try {
+            body()
+        } catch (e: Exception) {
+            invoke.reject(e.toString()) // off the UI thread Tauri doesn't catch it for us
+        }
+    }
+
+    @Command
+    fun scan(invoke: Invoke) = background(invoke) { readScan(invoke) }
+
+    @Command
+    fun link(invoke: Invoke) = background(invoke) { readLink(invoke) }
+
+    private fun readScan(invoke: Invoke) {
+        if (status() != "authorized") {
+            invoke.reject("permission denied: Wi-Fi scanning needs precise location access")
+            return
+        }
+        val warnings = JSONArray()
+        // startScan() doesn't wait: getScanResults() below returns the previous scan. Every call counts
+        // against the throttle (4 / 2 min), so the Rust side re-reads with trigger=false while it waits.
+        @Suppress("DEPRECATION")
+        if (invoke.getArgs().optBoolean("trigger", true) && !wifi.startScan()) {
+            warnings.put("scan throttled (Android allows 4 scans / 2 min): turn off Developer options › Wi-Fi scan throttling")
+        }
+        val results = try {
+            wifi.scanResults
+        } catch (e: SecurityException) {
+            invoke.reject("permission denied: ${e.message}")
+            return
+        }
+        if (results.isEmpty()) {
+            val lm = activity.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            if (!lm.isLocationEnabled) warnings.put("Location is off: Android returns no scan results until it's on")
+        }
+        @Suppress("DEPRECATION")
+        val connected = wifi.connectionInfo?.bssid?.lowercase()
+        val nowUs = SystemClock.elapsedRealtimeNanos() / 1000
+        val bss = JSONArray()
+        for (r in results) bss.put(toRawBss(r, connected, nowUs))
+        invoke.resolve(JSObject().apply {
+            put("bss", bss)
+            put("warnings", warnings)
+            put("newestUs", results.maxOfOrNull { it.timestamp } ?: 0L) // changes when a scan lands
+        })
+    }
+
+    /** The current association as wifi_scan::LinkInfo, or null when not connected / redacted. */
+    private fun readLink(invoke: Invoke) {
+        @Suppress("DEPRECATION")
+        val i = wifi.connectionInfo
+        val bssid = i?.bssid?.lowercase()
+        // 02:00:00:00:00:00: not connected, or hidden without location access
+        if (i == null || bssid == null || bssid == "02:00:00:00:00:00") {
+            invoke.resolve(JSObject().apply { put("link", JSONObject.NULL) })
+            return
+        }
+        val ssid = i.ssid?.takeIf { it != WifiManager.UNKNOWN_SSID }?.removeSurrounding("\"")
+        val o = JSObject()
+        o.put("bssid", bssid)
+        o.put("ssid", ssid ?: JSONObject.NULL)
+        o.put("rssiDbm", if (i.rssi == -127) JSONObject.NULL else i.rssi) // -127: INVALID_RSSI
+        o.put("txMbps", if (i.txLinkSpeedMbps < 0) JSONObject.NULL else i.txLinkSpeedMbps)
+        o.put("rxMbps", if (i.rxLinkSpeedMbps < 0) JSONObject.NULL else i.rxLinkSpeedMbps)
+        o.put("mcs", JSONObject.NULL)
+        o.put("nss", JSONObject.NULL)
+        invoke.resolve(JSObject().apply { put("link", o) })
+    }
+
+    private fun toRawBss(r: ScanResult, connected: String?, nowUs: Long): JSObject {
+        val ies = StringBuilder()
+        var hasSsidIe = false
+        for (e in r.informationElements) {
+            // getBytes() is a read-only buffer without the id/len header (and without the ext id for 255)
+            val body = ByteArray(e.bytes.remaining()).also { e.bytes.duplicate().get(it) }
+            if (e.id == 0) hasSsidIe = true
+            if (e.id == 255) ies.hex(255).hex(body.size + 1).hex(e.idExt)
+            else ies.hex(e.id).hex(body.size)
+            for (b in body) ies.hex(b.toInt())
+        }
+        val o = JSObject()
+        o.put("bssid", JSONArray(r.BSSID.split(":").map { it.toInt(16) }))
+        @Suppress("DEPRECATION")
+        if (!hasSsidIe) o.put("ssid", JSONArray(r.SSID.toByteArray().map { it.toInt() and 0xff }))
+        o.put("freqMhz", r.frequency)
+        o.put("rssiDbm", r.level)
+        o.put("ies", ies.toString())
+        o.put("ageMs", ((nowUs - r.timestamp) / 1000).coerceIn(0, Int.MAX_VALUE.toLong()))
+        o.put("connected", r.BSSID.lowercase() == connected)
+        when (r.channelWidth) {
+            ScanResult.CHANNEL_WIDTH_20MHZ -> 20
+            ScanResult.CHANNEL_WIDTH_40MHZ -> 40
+            ScanResult.CHANNEL_WIDTH_80MHZ -> 80
+            ScanResult.CHANNEL_WIDTH_160MHZ, ScanResult.CHANNEL_WIDTH_80MHZ_PLUS_MHZ -> 160
+            5 -> 320 // CHANNEL_WIDTH_320MHZ, API 33
+            else -> null
+        }?.let { o.put("osChannelWidthMhz", it) }
+        return o
+    }
+
+    private fun StringBuilder.hex(v: Int): StringBuilder = append(HEX[v shr 4 and 15]).append(HEX[v and 15])
+
+    private companion object {
+        const val HEX = "0123456789abcdef"
+    }
+}

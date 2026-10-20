@@ -1,0 +1,7 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Theme.wifisight" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- behind the status / gesture bars (edge-to-edge): the toolbar and bottom bar colour (light bg-2 in styles.css) -->
+        <item name="android:windowBackground">#FFFFFF</item>
+    </style>
+</resources>
