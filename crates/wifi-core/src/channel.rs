@@ -56,7 +56,7 @@ pub fn channel_to_freq(band: Band, ch: u32) -> Option<u32> {
     }
 }
 
-/// Primary channel → band from what the OS reports (used when frequency is missing).
+/// Display name of a band, e.g. "2.4 GHz".
 pub fn band_label(b: Band) -> &'static str {
     match b {
         Band::B2g4 => "2.4 GHz",
@@ -64,11 +64,6 @@ pub fn band_label(b: Band) -> &'static str {
         Band::B6 => "6 GHz",
         Band::Other => "other",
     }
-}
-
-/// DFS channels in 5 GHz (W53 / W56 in Japan).
-pub fn is_dfs_5g(ch: u32) -> bool {
-    (52..=144).contains(&ch)
 }
 
 #[cfg(test)]

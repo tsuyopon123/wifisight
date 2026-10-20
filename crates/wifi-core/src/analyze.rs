@@ -43,7 +43,7 @@ pub fn analyze(raw: &RawBss, oui: Option<&OuiDb>) -> BssInfo {
         (
             center_freq.saturating_sub(width / 2),
             center_freq + width / 2,
-        ) // a bogus tiny frequency
+        )
     };
 
     // ── Capabilities ──
@@ -57,110 +57,24 @@ pub fn analyze(raw: &RawBss, oui: Option<&OuiDb>) -> BssInfo {
         .unwrap_or_default();
     let mut basic_rates: Vec<f32> = basic_a.into_iter().chain(basic_b).collect();
     let mut supported_rates: Vec<f32> = sup_a.into_iter().chain(sup_b).collect();
-    basic_rates.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    supported_rates.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    basic_rates.sort_by(f32::total_cmp);
+    supported_rates.sort_by(f32::total_cmp);
     supported_rates.dedup();
 
     let ht = els.get(ie::EID_HT_CAP).and_then(ie::ht_cap);
     let vht = els.get(ie::EID_VHT_CAP).and_then(ie::vht_cap);
     let he = els.get_ext(ie::EXT_HE_CAP).and_then(ie::he_cap);
     let he_op = els.get_ext(ie::EXT_HE_OP).and_then(ie::he_op);
-    let eht = els
-        .get_ext(ie::EXT_EHT_CAP)
-        .and_then(|d| ie::eht_cap(d, he.as_ref().map(|h| h.width_set).unwrap_or(0)));
-
-    let mut phy_modes = Vec::new();
-    match band {
-        Band::B2g4 => {
-            let b_rates = [1.0f32, 2.0, 5.5, 11.0];
-            if supported_rates.iter().any(|r| b_rates.contains(r)) || supported_rates.is_empty() {
-                phy_modes.push("b".to_string());
-            }
-            if supported_rates.iter().any(|r| !b_rates.contains(r)) {
-                phy_modes.push("g".to_string());
-            }
-        }
-        Band::B5 => phy_modes.push("a".into()),
-        _ => {}
-    }
-    if ht.is_some() && band != Band::B6 {
-        phy_modes.push("n".into());
-    }
-    if vht.is_some() && band == Band::B5 {
-        phy_modes.push("ac".into());
-    }
-    if he.is_some() {
-        phy_modes.push("ax".into());
-    }
-    if eht.is_some() {
-        phy_modes.push("be".into());
-    }
-    let generation = if eht.is_some() {
-        "Wi-Fi 7 (802.11be)"
-    } else if he.is_some() {
-        if band == Band::B6 {
-            "Wi-Fi 6E (802.11ax)"
-        } else {
-            "Wi-Fi 6 (802.11ax)"
-        }
-    } else if vht.is_some() && band == Band::B5 {
-        "Wi-Fi 5 (802.11ac)"
-    } else if ht.is_some() {
-        "Wi-Fi 4 (802.11n)"
-    } else {
-        "Legacy (802.11a/b/g)"
-    }
-    .to_string();
-
-    // ── Max PHY rate ──
-    let (max_rate, nss) = if let Some(e) = &eht {
-        let nss = if e.nss > 0 {
-            e.nss
-        } else {
-            he.as_ref().map(|h| h.nss).unwrap_or(1)
-        };
-        (
-            Some(rate(Phy::Eht, width.min(320), e.max_mcs, nss, true)),
-            Some(nss),
-        )
-    } else if let Some(h) = &he {
-        let w = width.min(160);
-        let nss = if w == 160 {
-            h.nss160.filter(|&n| n > 0).unwrap_or(h.nss)
-        } else {
-            h.nss
-        };
-        (Some(rate(Phy::He, w, h.max_mcs, nss, true)), Some(nss))
-    } else if let (Some(v), Band::B5) = (&vht, band) {
-        let w = width.min(160);
-        let mut mcs = v.max_mcs;
-        if w == 20 && mcs == 9 {
-            mcs = 8;
-        }
-        let sgi = match w {
-            160 => v.sgi160,
-            80 => v.sgi80,
-            40 => ht.as_ref().map(|h| h.sgi40).unwrap_or(false),
-            _ => ht.as_ref().map(|h| h.sgi20).unwrap_or(false),
-        };
-        (Some(rate(Phy::Vht, w, mcs, v.nss, sgi)), Some(v.nss))
-    } else if let Some(h) = &ht {
-        let w = if width >= 40 && h.width40 { 40 } else { 20 };
-        let sgi = if w == 40 { h.sgi40 } else { h.sgi20 };
-        (
-            Some(rate(Phy::Ht, w, 7, h.nss.max(1), sgi)),
-            Some(h.nss.max(1)),
-        )
-    } else {
-        (
-            supported_rates
-                .iter()
-                .cloned()
-                .fold(None, |m: Option<f32>, r| Some(m.map_or(r, |x| x.max(r))))
-                .map(|r| r as f64),
-            Some(1),
-        )
+    let eht = els.get_ext(ie::EXT_EHT_CAP).and_then(ie::eht_cap);
+    let caps = Caps {
+        ht: ht.as_ref(),
+        vht: vht.as_ref(),
+        he: he.as_ref(),
+        eht: eht.as_ref(),
     };
+    let phy_modes = phy_modes(band, &supported_rates, &caps);
+    let generation = generation(band, &caps).to_string();
+    let (max_rate, nss) = max_rate(band, width, &supported_rates, &caps);
     let max_rate = max_rate.map(|r| (r * 10.0).round() / 10.0);
 
     // ── Misc elements ──
@@ -204,40 +118,7 @@ pub fn analyze(raw: &RawBss, oui: Option<&OuiDb>) -> BssInfo {
 
     let locally_administered = is_locally_administered(&raw.bssid);
     let (wps_manuf, model) = ie::wps_info(&els);
-    let oui_name = |o: &[u8]| -> Option<String> {
-        let m = [o[0], o[1], o[2], 0, 0, 0];
-        oui.and_then(|db| db.lookup(&m))
-            .or_else(|| ie::vendor_oui_name(o))
-            .map(str::to_string)
-    };
-    // Vendor IE OUIs: AP makers first, radio chipsets only as a last resort.
-    let ie_vendor = |chipset: bool| {
-        els.vendors().find_map(|v| {
-            let o = v.get(..3)?;
-            if ie::non_ap_oui(o) != chipset.then_some(true) {
-                return None;
-            }
-            oui_name(o)
-        })
-    };
-    let vendor = oui
-        .and_then(|db| db.lookup(&raw.bssid))
-        .map(str::to_string)
-        .or_else(|| {
-            els.get(ie::EID_CISCO_CCX1)
-                .map(|_| "Cisco (IE)".to_string())
-        })
-        .or_else(|| wps_manuf.map(|m| format!("{m} (WPS)")))
-        .or_else(|| ie_vendor(false).map(|n| format!("{n} (IE)")))
-        .or_else(|| {
-            // Multi-BSSID APs often derive extra BSSIDs by setting the U/L bit on their own OUI.
-            // ponytail: a random (tethering) MAC can hit a real OUI this way (~1%), hence the "?".
-            let mut m = raw.bssid;
-            m[0] &= !0x02;
-            let name = oui.filter(|_| locally_administered)?.lookup(&m)?;
-            Some(format!("{name} ?"))
-        })
-        .or_else(|| ie_vendor(true).map(|n| format!("{n} chipset")));
+    let vendor = guess_vendor(raw, &els, oui, wps_manuf, locally_administered);
 
     let (mld, mld_link_id) = els.get_ext(ie::EXT_MULTI_LINK).and_then(ie::mld).unzip();
     let noise = raw.noise_dbm.filter(|&n| n < 0 && n > -130);
@@ -289,6 +170,145 @@ pub fn analyze(raw: &RawBss, oui: Option<&OuiDb>) -> BssInfo {
         mld,
         mld_link_id: mld_link_id.flatten(),
     }
+}
+
+/// The capability elements the PHY summary is derived from.
+struct Caps<'a> {
+    ht: Option<&'a ie::HtCap>,
+    vht: Option<&'a ie::VhtCap>,
+    he: Option<&'a ie::HeCap>,
+    eht: Option<&'a ie::EhtCap>,
+}
+
+fn phy_modes(band: Band, supported_rates: &[f32], c: &Caps) -> Vec<String> {
+    let mut modes = Vec::new();
+    match band {
+        Band::B2g4 => {
+            let b_rates = [1.0f32, 2.0, 5.5, 11.0];
+            if supported_rates.iter().any(|r| b_rates.contains(r)) || supported_rates.is_empty() {
+                modes.push("b");
+            }
+            if supported_rates.iter().any(|r| !b_rates.contains(r)) {
+                modes.push("g");
+            }
+        }
+        Band::B5 => modes.push("a"),
+        _ => {}
+    }
+    if c.ht.is_some() && band != Band::B6 {
+        modes.push("n");
+    }
+    if c.vht.is_some() && band == Band::B5 {
+        modes.push("ac");
+    }
+    if c.he.is_some() {
+        modes.push("ax");
+    }
+    if c.eht.is_some() {
+        modes.push("be");
+    }
+    modes.into_iter().map(String::from).collect()
+}
+
+fn generation(band: Band, c: &Caps) -> &'static str {
+    if c.eht.is_some() {
+        "Wi-Fi 7 (802.11be)"
+    } else if c.he.is_some() {
+        if band == Band::B6 {
+            "Wi-Fi 6E (802.11ax)"
+        } else {
+            "Wi-Fi 6 (802.11ax)"
+        }
+    } else if c.vht.is_some() && band == Band::B5 {
+        "Wi-Fi 5 (802.11ac)"
+    } else if c.ht.is_some() {
+        "Wi-Fi 4 (802.11n)"
+    } else {
+        "Legacy (802.11a/b/g)"
+    }
+}
+
+/// Max PHY rate (Mbps, unrounded) and spatial streams.
+fn max_rate(band: Band, width: u32, supported_rates: &[f32], c: &Caps) -> (Option<f64>, Option<u8>) {
+    if let Some(e) = c.eht {
+        let nss = if e.nss > 0 {
+            e.nss
+        } else {
+            c.he.map(|h| h.nss).unwrap_or(1)
+        };
+        (Some(rate(Phy::Eht, width.min(320), e.max_mcs, nss, true)), Some(nss))
+    } else if let Some(h) = c.he {
+        let w = width.min(160);
+        let nss = if w == 160 {
+            h.nss160.filter(|&n| n > 0).unwrap_or(h.nss)
+        } else {
+            h.nss
+        };
+        (Some(rate(Phy::He, w, h.max_mcs, nss, true)), Some(nss))
+    } else if let (Some(v), Band::B5) = (c.vht, band) {
+        let w = width.min(160);
+        let mut mcs = v.max_mcs;
+        if w == 20 && mcs == 9 {
+            mcs = 8;
+        }
+        let sgi = match w {
+            160 => v.sgi160,
+            80 => v.sgi80,
+            40 => c.ht.map(|h| h.sgi40).unwrap_or(false),
+            _ => c.ht.map(|h| h.sgi20).unwrap_or(false),
+        };
+        (Some(rate(Phy::Vht, w, mcs, v.nss, sgi)), Some(v.nss))
+    } else if let Some(h) = c.ht {
+        let w = if width >= 40 && h.width40 { 40 } else { 20 };
+        let sgi = if w == 40 { h.sgi40 } else { h.sgi20 };
+        let nss = h.nss.max(1);
+        (Some(rate(Phy::Ht, w, 7, nss, sgi)), Some(nss))
+    } else {
+        // `supported_rates` is sorted, so the last one is the fastest legacy rate.
+        (supported_rates.last().map(|&r| r as f64), Some(1))
+    }
+}
+
+fn guess_vendor(
+    raw: &RawBss,
+    els: &Elements,
+    oui: Option<&OuiDb>,
+    wps_manuf: Option<String>,
+    locally_administered: bool,
+) -> Option<String> {
+    let oui_name = |o: &[u8]| -> Option<String> {
+        let m = [o[0], o[1], o[2], 0, 0, 0];
+        oui.and_then(|db| db.lookup(&m))
+            .or_else(|| ie::vendor_oui_name(o))
+            .map(str::to_string)
+    };
+    // Vendor IE OUIs: AP makers first, radio chipsets only as a last resort.
+    let ie_vendor = |chipset: bool| {
+        els.vendors().find_map(|v| {
+            let o = v.get(..3)?;
+            if ie::non_ap_oui(o) != chipset.then_some(true) {
+                return None;
+            }
+            oui_name(o)
+        })
+    };
+    oui.and_then(|db| db.lookup(&raw.bssid))
+        .map(str::to_string)
+        .or_else(|| {
+            els.get(ie::EID_CISCO_CCX1)
+                .map(|_| "Cisco (IE)".to_string())
+        })
+        .or_else(|| wps_manuf.map(|m| format!("{m} (WPS)")))
+        .or_else(|| ie_vendor(false).map(|n| format!("{n} (IE)")))
+        .or_else(|| {
+            // Multi-BSSID APs often derive extra BSSIDs by setting the U/L bit on their own OUI.
+            // ponytail: a random (tethering) MAC can hit a real OUI this way (~1%), hence the "?".
+            let mut m = raw.bssid;
+            m[0] &= !0x02;
+            let name = oui.filter(|_| locally_administered)?.lookup(&m)?;
+            Some(format!("{name} ?"))
+        })
+        .or_else(|| ie_vendor(true).map(|n| format!("{n} chipset")))
 }
 
 /// Returns (width MHz, center channel number).
@@ -383,7 +403,7 @@ fn channel_geometry(els: &Elements, band: Band, primary: u32, os_width: Option<u
 }
 
 /// Standard channelisation when only the width is known (macOS without IEs).
-pub fn aligned_center(band: Band, primary: u32, width: u32) -> Option<u32> {
+fn aligned_center(band: Band, primary: u32, width: u32) -> Option<u32> {
     match band {
         Band::B5 => {
             let centers: &[u32] = match width {

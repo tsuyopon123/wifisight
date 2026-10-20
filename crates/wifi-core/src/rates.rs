@@ -37,9 +37,8 @@ fn nsd_he(width: u32) -> f64 {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phy {
-    Legacy,
     Ht,
     Vht,
     He,
@@ -51,7 +50,6 @@ pub fn rate(phy: Phy, width: u32, mcs: u8, nss: u8, short_gi: bool) -> f64 {
     let mcs = mcs.min(13) as usize;
     let nss = nss.max(1) as f64;
     match phy {
-        Phy::Legacy => 0.0,
         Phy::Ht | Phy::Vht => {
             let sym = if short_gi { 3.6 } else { 4.0 };
             nsd_ht_vht(width) * BITS[mcs] * nss / sym
