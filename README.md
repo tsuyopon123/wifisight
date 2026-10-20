@@ -138,6 +138,7 @@ sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appi
 npm install
 npm run tauri dev     # run in development mode
 npm run tauri build   # build bundles (.app/.dmg, -setup.exe, .deb)
+npm run build:probe   # the UI the CLI serves at /ui; needed before building the CLI
 cargo run -p wifi-cli -- scan   # run the CLI
 ```
 

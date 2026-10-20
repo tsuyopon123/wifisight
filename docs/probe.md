@@ -28,7 +28,7 @@ Probe 側で `wifisight-cli serve` を動かし、GUI の ⚙ 設定 › Probe �
 GUI に対して、Probe は生のスキャン結果（`RawBss` と hex の IE）を HTTP で JSON として返すだけである。
 解析は PC 側の `wifi-core` が行い、OUI DB も PC 側のものを使う。
 そのため、Probe 側の CLI を更新しなくても PC 側の解析の改善が反映される。
-ブラウザ用のページ（`/ui`）と `/bss` だけは、Probe 側の `wifi-core` で解析した結果を使う。
+ブラウザ用の UI（`/ui`）と `/bss` だけは、Probe 側の `wifi-core` で解析した結果を使う。
 
 ## 対応するデバイス
 
@@ -54,7 +54,7 @@ Linux を推奨する。
 
    以前の手順で `/etc/systemd/system/wifisight-probe.service` を自分で作った場合は、そちらが優先されるので削除してから `sudo systemctl daemon-reload` する。
 
-2. `.deb` を使わない場合は、`wifisight-cli-<バージョン>-linux-x86_64.tar.gz`（aarch64 機では `linux-aarch64`）を展開して `/usr/local/bin/` に置くか、デバイス上で `cargo build -p wifi-cli --release` でビルドする。
+2. `.deb` を使わない場合は、`wifisight-cli-<バージョン>-linux-x86_64.tar.gz`（aarch64 機では `linux-aarch64`）を展開して `/usr/local/bin/` に置くか、デバイス上で `npm ci && npm run build:probe`（CLI に埋め込む `/ui` の UI を作る。Node.js 22 が必要）のあと `cargo build -p wifi-cli --release` でビルドする。
    systemd で常駐させるには、`.deb` と同じ unit（[crates/wifi-cli/deb/wifisight-probe.service](../crates/wifi-cli/deb/wifisight-probe.service)）を `/etc/systemd/system/` に置き、`ExecStart` のパスを `/usr/local/bin/wifisight-cli` にして `sudo systemctl enable --now wifisight-probe` する。
 
 3. スキャンに使う Wi-Fi インターフェースは、どのアクセスポイントにも接続しないでおく。接続中のインターフェースではスキャンを間引くドライバがある。
@@ -83,8 +83,10 @@ GUI の ⚙ 設定 › Probe に `<host>:8737`（直結の例では `wifiprobe.l
 Interface の一覧が Probe 側のものに切り替わり、ステータスバーのインターフェース名が `probe:wlan0` のようになる。
 Probe 欄を空にすると PC の Wi-Fi での計測に戻る。
 
-iPad など GUI を入れられない端末では、ブラウザで `http://<host>:8737/ui`（直結の例では `http://wifiprobe.local:8737/ui`）を開くと、Probe の計測結果を一覧で見られる。
-ページは自動でスキャンを繰り返し、列見出しで並べ替え、SSID / AP 名で絞り込みができる。
+iPad など GUI を入れられない端末では、ブラウザで `http://<host>:8737/ui`（直結の例では `http://wifiprobe.local:8737/ui`）を開くと、デスクトップ版と同じ UI（スキャナ、チャネル、信号、ローミングログ、サーベイ）で Probe の計測結果を見られる。
+iPadOS / Safari 16.2 以降が必要である。
+アップデートと OUI DB のダウンロードはデスクトップ版だけの機能で、ブラウザでは使えない。
+サーベイの自動保存はブラウザの localStorage（Safari では約 5 MB）に入るので、大きな間取り図を使うときは Save… で保存する。
 ベンダー名を出すには、IEEE の [oui.csv](https://standards-oui.ieee.org/oui/oui.csv) を誰でも読める場所（例: `/usr/local/share/wifisight/oui.csv`）に置き、`sudo systemctl edit wifisight-probe` で `ExecStart` に `--oui` を足す（例: `ExecStart=/usr/bin/wifisight-cli --oui /usr/local/share/wifisight/oui.csv serve --listen 0.0.0.0:8737`）。
 unit は `DynamicUser=yes` で動くので、ホームディレクトリなどに置くと読めない（読めないときは起動ログに warning が出る）。
 
@@ -103,7 +105,7 @@ API は次のとおりである。
 | `GET /scan?iface=wlan0` | スキャン結果（生、GUI が使う） |
 | `GET /bss?iface=wlan0` | Probe 側で解析したスキャン結果（`wifisight-cli scan --json` と同じ形） |
 | `GET /link?iface=wlan0` | 接続中のリンク（BSSID、送受信レート、MCS、NSS）。未接続なら `null` |
-| `GET /ui` | ブラウザ用のページ（HTML） |
+| `GET /ui` | ブラウザ用の UI（デスクトップ版と同じ画面、HTML 1 ファイル） |
 
 GUI は `/link` を 1 秒ごとに呼び、ステータスバーとローミングログに使う。
 Probe はふだん未接続で計測するので `null` が返る。
@@ -130,6 +132,7 @@ API に認証はない（読み取り専用）。
 PC 自身で `serve` を動かすと、Probe 経由の動作を確認できる。
 
 ```sh
+npm run build:probe   # /ui の UI（初回と src/ を変えたとき）
 cargo run -p wifi-cli -- serve --listen 127.0.0.1:8737
 ```
 

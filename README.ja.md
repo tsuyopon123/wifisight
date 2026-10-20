@@ -129,6 +129,7 @@ sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appi
 npm install
 npm run tauri dev     # 開発モードで起動
 npm run tauri build   # 配布用バンドルを作成（.app/.dmg、-setup.exe、.deb）
+npm run build:probe   # CLI が /ui で配信する UI。CLI のビルド前に必要
 cargo run -p wifi-cli -- scan   # CLI を実行
 ```
 

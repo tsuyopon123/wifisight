@@ -249,8 +249,8 @@ fn serve_scan(last: &std::sync::Mutex<LastScan>, iface: Option<String>) -> (u128
     (ms, scan)
 }
 
-/// The browser page (iPad etc.); the same file is published on the website under /probe/.
-const UI: &str = include_str!("../../../site/probe/index.html");
+/// The desktop UI as one HTML file for browsers (iPad etc.), built by `npm run build:probe`.
+const UI: &str = include_str!("../ui/index.html");
 
 fn handle(
     stream: std::net::TcpStream,

@@ -128,7 +128,7 @@ function resetLink() {
 
 /** Every second, independent of scanning: roaming tests run with scans paused (scans disturb roaming). */
 async function pollLink() {
-  if (linkBusy || !api.isTauri) return;
+  if (linkBusy || !api.hasBackend) return;
   linkBusy = true;
   const g = linkGen;
   try {
@@ -210,7 +210,9 @@ function explain(err: string): { title: string; hint: string; act?: Act } {
       };
     return {
       title: `Can't reach probe ${p}`,
-      hint: "Check that this computer can reach it on the network and that wifisight-cli serve is running there — or clear Probe in Settings to use this computer's Wi-Fi.",
+      hint: api.isProbePage
+        ? "Check that this device can still reach it on the network and that wifisight-cli serve is running there."
+        : "Check that this computer can reach it on the network and that wifisight-cli serve is running there — or clear Probe in Settings to use this computer's Wi-Fi.",
       act: "settings",
     };
   }
@@ -752,7 +754,7 @@ async function loadInterfaces() {
     $("sel-iface").innerHTML =
       `<option value="">(default)</option>` + ifs.map((i) => `<option value="${esc(i.id)}">${esc(i.name)}${i.mac ? " — " + esc(i.mac) : ""}</option>`).join("");
   } catch (e) {
-    $("sel-iface").innerHTML = `<option value="">${api.isTauri ? "(none found)" : "(desktop app only)"}</option>`;
+    $("sel-iface").innerHTML = `<option value="">${api.hasBackend ? "(none found)" : "(desktop app only)"}</option>`;
     $("st-warn").textContent = explain(String(e)).title;
     $("st-warn").title = String(e);
   }
@@ -839,13 +841,19 @@ async function init() {
   state.installable = info.installable;
   for (const id of ["btn-update", "chk-autoupdate", "chk-beta"]) $<HTMLInputElement>(id).disabled = !api.isTauri;
   $("st-platform").textContent = `${info.os}${info.arch ? "/" + info.arch : ""} · v${info.version}`;
-  $("oui-status").textContent = info.ouiEntries ? `${info.ouiEntries.toLocaleString()} OUIs loaded.` : "Not loaded.";
+  $("oui-status").textContent = api.isProbePage
+    ? "Vendor names come from the probe (wifisight-cli --oui)."
+    : info.ouiEntries
+      ? `${info.ouiEntries.toLocaleString()} OUIs loaded.`
+      : "Not loaded.";
+  $<HTMLButtonElement>("btn-oui").disabled = !api.isTauri;
   document.querySelectorAll<HTMLElement>(".loc-row").forEach((el) => (el.hidden = !info.locationStatus));
   if (api.isTauri && !info.ouiEntries) $("btn-oui").click(); // first run: fetch vendor DB without making the user hunt for it
   const probeInput = $<HTMLInputElement>("probe");
   probeInput.disabled = !api.isTauri;
   try {
-    state.probe = (api.isTauri && localStorage.getItem("wifisight.probe")) || null;
+    // the probe page always talks to the probe that served it
+    state.probe = api.isProbePage ? location.host : (api.isTauri && localStorage.getItem("wifisight.probe")) || null;
   } catch {
     state.probe = null;
   }
