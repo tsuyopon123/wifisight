@@ -7,3 +7,4 @@ src-tauri/gen/
 .claude/
 .impeccable/
 site/THIRD_PARTY_LICENSES.html
+crates/wifi-cli/ui/

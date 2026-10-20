@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>WiFiSight Probe</title>
+  <!-- The website can't fetch an http:// probe (mixed content), so this page only opens the UI the probe serves at /ui. -->
+  <style>
+    :root {
+      --bg: #ffffff;
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --line: #d2d2d7;
+      --btn: #0071e3;
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #000000;
+        --ink: #f5f5f7;
+        --muted: #a1a1a6;
+        --line: #424245;
+        color-scheme: dark;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 400 0.9375rem/1.4 var(--font);
+      -webkit-text-size-adjust: 100%;
+    }
+    h1 { margin: 0; font-size: 1.0625rem; font-weight: 600; }
+    input, button {
+      font: inherit;
+      color: inherit;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0.4rem 0.6rem;
+      min-height: 2.25rem;
+    }
+    button { background: var(--btn); color: #fff; border-color: var(--btn); cursor: pointer; }
+    form#go { max-width: 32rem; margin: 3rem auto; padding: 0 1rem; }
+    form#go label { display: block; margin-bottom: 0.5rem; }
+    form#go div { display: flex; gap: 0.5rem; }
+    form#go input { flex: 1; }
+    form#go p { color: var(--muted); font-size: 0.8125rem; }
+  </style>
+</head>
+<body>
+  <form id="go">
+    <h1>WiFiSight Probe</h1>
+    <label for="addr">Probe address</label>
+    <div>
+      <input id="addr" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="wifiprobe.local:8737" />
+      <button>Open</button>
+    </div>
+    <p>Opens http://&lt;address&gt;/ui, the WiFiSight UI served by <code>wifisight-cli serve</code> on the probe (iPadOS / Safari 16.2 or later).</p>
+  </form>
+
+  <script>
+    const KEY = "wifisight.probe";
+    const addr = document.getElementById("addr");
+    try { addr.value = localStorage.getItem(KEY) || ""; } catch {}
+    addr.value ||= "wifiprobe.local:8737";
+    document.getElementById("go").onsubmit = (e) => {
+      e.preventDefault();
+      const a = addr.value.trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+      if (!a) return;
+      try { localStorage.setItem(KEY, a); } catch {}
+      location.href = "http://" + a + "/ui";
+    };
+  </script>
+</body>
+</html>

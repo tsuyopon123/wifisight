@@ -64,7 +64,8 @@ enum Cmd {
         #[arg(short, long)]
         iface: Option<String>,
     },
-    /// Run as an external probe: serve raw scans over HTTP (GET /, /interfaces, /scan?iface=X, /link?iface=X)
+    /// Run as an external probe: serve scans over HTTP (GET /, /interfaces, /scan?iface=X raw,
+    /// /bss?iface=X analysed, /link?iface=X, /ui browser page)
     Serve {
         /// Address to listen on (e.g. one interface's IP: 192.168.1.20:8737)
         #[arg(long, default_value = "0.0.0.0:8737")]
@@ -80,6 +81,11 @@ fn now_ms() -> u128 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0)
+}
+
+/// `scan --json` and the probe's /bss.
+fn snapshot_json(interface: &str, warnings: &[String], bss: &[BssInfo]) -> serde_json::Value {
+    serde_json::json!({"timestampMs": now_ms() as u64, "interface": interface, "warnings": warnings, "bss": bss})
 }
 
 fn do_scan(opts: &ScanOptions) -> Result<(String, Vec<RawBss>, Vec<String>), String> {
@@ -223,17 +229,18 @@ fn pct_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-/// Last /scan answer: (finished at, iface asked for, status, body).
-type LastScan = Option<(Instant, Option<String>, &'static str, String)>;
+type Scan = Result<wifi_scan::ScanOutput, String>;
+/// Last scan: (finished at, iface asked for, result).
+type LastScan = Option<(Instant, Option<String>, Scan)>;
 
 /// Run one scan at a time (the radio can't do two). A request that waited while another scan of the
 /// same iface was running reuses that result instead of queueing a second ~7 s scan.
-fn serve_scan(last: &std::sync::Mutex<LastScan>, iface: Option<String>) -> (&'static str, String) {
+fn serve_scan(last: &std::sync::Mutex<LastScan>, iface: Option<String>) -> Scan {
     let asked = Instant::now();
     let mut last = last.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some((at, i, status, body)) = last.as_ref() {
+    if let Some((at, i, scan)) = last.as_ref() {
         if *at > asked && *i == iface {
-            return (status, body.clone());
+            return scan.clone();
         }
     }
     let opts = ScanOptions {
@@ -241,26 +248,19 @@ fn serve_scan(last: &std::sync::Mutex<LastScan>, iface: Option<String>) -> (&'st
         trigger: true,
         wait: true,
     };
-    let (status, body) = match do_scan(&opts) {
-        Ok((interface, bss, warnings)) => (
-            "200 OK",
-            serde_json::to_string(&wifi_scan::ScanOutput {
-                interface,
-                bss,
-                warnings,
-            })
-            .unwrap(),
-        ),
-        Err(e) => ("500 Internal Server Error", e),
-    };
-    *last = Some((Instant::now(), iface, status, body.clone()));
-    (status, body)
+    let scan = wifi_scan::scan(&opts).map_err(|e| e.to_string());
+    *last = Some((Instant::now(), iface, scan.clone()));
+    scan
 }
+
+/// The desktop UI as one HTML file for browsers (iPad etc.), built by `npm run build:probe`.
+const UI: &str = include_str!("../ui/index.html");
 
 fn handle(
     stream: std::net::TcpStream,
     default_iface: Option<String>,
     last: &std::sync::Mutex<LastScan>,
+    oui: Option<&OuiDb>,
 ) {
     use std::io::{BufRead, BufReader};
     let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
@@ -280,7 +280,21 @@ fn handle(
             Ok(l) => ("200 OK", serde_json::to_string(&l).unwrap()),
             Err(e) => ("500 Internal Server Error", e.to_string()),
         },
-        "/scan" => serve_scan(last, iface),
+        "/scan" => match serve_scan(last, iface) {
+            Ok(o) => ("200 OK", serde_json::to_string(&o).unwrap()),
+            Err(e) => ("500 Internal Server Error", e),
+        },
+        // what `scan --json` prints (default sort: RSSI)
+        "/bss" => match serve_scan(last, iface) {
+            Ok(o) => {
+                let mut bss: Vec<BssInfo> = o.bss.iter().map(|r| analyze(r, oui)).collect();
+                bss.sort_by_key(|b| -b.rssi_dbm);
+                let json = snapshot_json(&o.interface, &o.warnings, &bss);
+                ("200 OK", json.to_string())
+            }
+            Err(e) => ("500 Internal Server Error", e),
+        },
+        "/ui" => ("200 OK", UI.to_string()),
         // no scan lock: a link read doesn't touch the radio, and the GUI polls it every second
         "/link" => match wifi_scan::link(iface.as_deref()) {
             Ok(l) => ("200 OK", serde_json::to_string(&l).unwrap()),
@@ -295,25 +309,38 @@ fn handle(
             line.split_whitespace().next().unwrap_or("?")
         );
     }
+    let ct = if path == "/ui" {
+        "text/html; charset=utf-8"
+    } else {
+        "application/json"
+    };
     let mut w = &stream;
     let _ = write!(
         w,
-        "HTTP/1.0 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        "HTTP/1.0 {status}\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
+    );
+    // Closing with request headers still unread makes Linux send RST, which can make the client drop
+    // the end of the response (the 120 KB /ui). Half-close, then read until the client closes.
+    let _ = stream.shutdown(std::net::Shutdown::Write);
+    let _ = std::io::copy(
+        &mut std::io::Read::take(&stream, 1 << 20),
+        &mut std::io::sink(),
     );
 }
 
 // ponytail: no auth, read-only, thread per connection — meant for a trusted network.
-fn serve(listen: &str, default_iface: Option<String>) {
+fn serve(listen: &str, default_iface: Option<String>, oui: Option<OuiDb>) {
     let listener = std::net::TcpListener::bind(listen).unwrap_or_else(|e| {
         eprintln!("cannot listen on {listen}: {e}");
         std::process::exit(1)
     });
     eprintln!("wifisight probe listening on http://{listen}");
     let last: &'static std::sync::Mutex<LastScan> = Box::leak(Box::default());
+    let oui: &'static Option<OuiDb> = Box::leak(Box::new(oui));
     for stream in listener.incoming().flatten() {
         let iface = default_iface.clone();
-        std::thread::spawn(move || handle(stream, iface, last));
+        std::thread::spawn(move || handle(stream, iface, last, oui.as_ref()));
     }
 }
 
@@ -322,10 +349,14 @@ fn main() {
     let oui = cli
         .oui
         .as_ref()
-        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|p| {
+            std::fs::read_to_string(p)
+                .map_err(|e| eprintln!("warning: cannot read {}: {e}", p.display()))
+                .ok()
+        })
         .map(|t| OuiDb::from_ieee_csv(&t));
     match cli.cmd {
-        Cmd::Serve { listen, iface } => serve(&listen, iface),
+        Cmd::Serve { listen, iface } => serve(&listen, iface, oui),
         Cmd::Link { iface } => match wifi_scan::link(iface.as_deref()) {
             Ok(l) => println!("{}", serde_json::to_string(&l).unwrap()),
             Err(e) => {
@@ -378,13 +409,8 @@ fn main() {
             if json {
                 println!(
                     "{}",
-                    serde_json::to_string_pretty(&serde_json::json!({
-                        "timestampMs": now_ms() as u64,
-                        "interface": ifname,
-                        "warnings": warnings,
-                        "bss": list,
-                    }))
-                    .unwrap()
+                    serde_json::to_string_pretty(&snapshot_json(&ifname, &warnings, &list))
+                        .unwrap()
                 );
             } else {
                 eprintln!("{} BSS on {}", list.len(), ifname);
@@ -465,5 +491,10 @@ mod tests {
         assert_eq!(super::route("/scan?iface=a%zz"), ("/scan", some("a%zz")));
         assert_eq!(super::route("/scan?iface="), ("/scan", None));
         assert_eq!(super::route("/interfaces"), ("/interfaces", None));
+    }
+
+    #[test]
+    fn ui_embedded() {
+        assert!(super::UI.contains("<html"));
     }
 }

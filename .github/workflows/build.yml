@@ -27,6 +27,14 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+      # the CLI embeds the UI it serves at /ui (crates/wifi-cli/ui/index.html)
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build the probe UI
+        run: npm run build:probe
       - name: Test core + scanner + cli
         run: cargo test -p wifi-core -p wifi-scan -p wifi-cli
       - name: Clippy (core / scanner / cli)
