@@ -851,7 +851,10 @@ fn element_fields(e: &Element) -> Vec<IeField> {
         ],
         (EID_COUNTRY, _) if d.len() >= 3 => country_fields(d),
         (EID_BSS_LOAD, _) if d.len() >= 5 => vec![
-            f("Station Count", u16::from_le_bytes([d[0], d[1]]).to_string()),
+            f(
+                "Station Count",
+                u16::from_le_bytes([d[0], d[1]]).to_string(),
+            ),
             f(
                 "Channel Utilization",
                 format!("{:.1} % ({}/255)", d[2] as f32 / 2.55, d[2]),
@@ -872,7 +875,10 @@ fn element_fields(e: &Element) -> Vec<IeField> {
         (EID_HT_OP, _) => ht_op(d).map(ht_op_fields).unwrap_or_default(),
         (EID_RSN, _) => rsn_fields(d),
         (EID_MOBILITY_DOMAIN, _) if d.len() >= 3 => vec![
-            f("MDID", format!("0x{:04x}", u16::from_le_bytes([d[0], d[1]]))),
+            f(
+                "MDID",
+                format!("0x{:04x}", u16::from_le_bytes([d[0], d[1]])),
+            ),
             f("FT over DS", yn(d[2] & 1 != 0)),
         ],
         (EID_EXT_CAP, _) => ext_cap_fields(d),
@@ -890,7 +896,10 @@ fn element_fields(e: &Element) -> Vec<IeField> {
             .map(|c| {
                 vec![
                     f("320 MHz (6 GHz)", yn(c.supports_320)),
-                    f("Rx NSS / Max MCS (≤80)", format!("{} / {}", c.nss, c.max_mcs)),
+                    f(
+                        "Rx NSS / Max MCS (≤80)",
+                        format!("{} / {}", c.nss, c.max_mcs),
+                    ),
                 ]
             })
             .unwrap_or_default(),
@@ -1078,7 +1087,10 @@ fn he_cap_fields(c: HeCap) -> Vec<IeField> {
             "Channel Width Set",
             flag_names(|b| c.width_set & (1 << b) != 0, &widths, "20 MHz"),
         ),
-        f("Rx NSS / Max MCS (≤80)", format!("{} / {}", c.nss, c.max_mcs)),
+        f(
+            "Rx NSS / Max MCS (≤80)",
+            format!("{} / {}", c.nss, c.max_mcs),
+        ),
     ];
     if let Some(n) = c.nss160 {
         v.push(f("Rx NSS (160)", n.to_string()));
@@ -1087,7 +1099,11 @@ fn he_cap_fields(c: HeCap) -> Vec<IeField> {
 }
 
 fn he_op_fields(o: HeOp) -> Vec<IeField> {
-    let disabled = if o.bss_color_disabled { " (disabled)" } else { "" };
+    let disabled = if o.bss_color_disabled {
+        " (disabled)"
+    } else {
+        ""
+    };
     let mut v = vec![
         f("BSS Color", format!("{}{disabled}", o.bss_color)),
         f("TWT Required", yn(o.twt_required)),
@@ -1095,7 +1111,10 @@ fn he_op_fields(o: HeOp) -> Vec<IeField> {
     if let Some(s) = &o.six_ghz {
         v.push(f("6 GHz Primary Channel", s.primary.to_string()));
         v.push(f("6 GHz Channel Width", format!("{} MHz", s.width)));
-        v.push(f("6 GHz CCFS0 / CCFS1", format!("{} / {}", s.ccfs0, s.ccfs1)));
+        v.push(f(
+            "6 GHz CCFS0 / CCFS1",
+            format!("{} / {}", s.ccfs0, s.ccfs1),
+        ));
     }
     v
 }

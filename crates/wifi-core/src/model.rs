@@ -151,6 +151,23 @@ pub struct BssInfo {
     pub mld_link_id: Option<u8>,
 }
 
+/// One analysed scan: the GUI's `scan` command, `wifisight-cli scan --json` and the probe's /bss.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Snapshot {
+    pub timestamp_ms: u64,
+    pub interface: String,
+    pub bss: Vec<BssInfo>,
+    pub warnings: Vec<String>,
+}
+
+pub fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 pub fn fmt_mac(b: &[u8; 6]) -> String {
     b.iter()
         .map(|x| format!("{x:02x}"))

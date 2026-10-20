@@ -10,10 +10,10 @@ name = "wifisight_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = "2"
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = "2"
 tauri-plugin-dialog = "2"
 serde.workspace = true
 serde_json.workspace = true

@@ -1,10 +1,10 @@
 //! wifisight-cli — headless scanner/logger sharing the GUI's analysis engine.
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 use std::io::Write;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use wifi_core::{analyze, BssInfo, OuiDb, RawBss};
+use std::time::{Duration, Instant};
+use wifi_core::{BssInfo, OuiDb, Snapshot};
 use wifi_scan::ScanOptions;
 
 #[derive(Parser)]
@@ -38,9 +38,9 @@ enum Cmd {
         /// Raw scanner output (hex IEs) as JSON — useful for bug reports / tests
         #[arg(long)]
         raw: bool,
-        /// Sort by: rssi | channel | ssid
-        #[arg(long, default_value = "rssi")]
-        sort: String,
+        /// Sort order
+        #[arg(long, value_enum, default_value_t = Sort::Rssi)]
+        sort: Sort,
     },
     /// Scan repeatedly and append JSON Lines (one scan per line)
     Watch {
@@ -76,21 +76,24 @@ enum Cmd {
     },
 }
 
-fn now_ms() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0)
+#[derive(Clone, Copy, ValueEnum)]
+enum Sort {
+    Rssi,
+    Channel,
+    Ssid,
 }
 
-/// `scan --json` and the probe's /bss.
-fn snapshot_json(interface: &str, warnings: &[String], bss: &[BssInfo]) -> serde_json::Value {
-    serde_json::json!({"timestampMs": now_ms() as u64, "interface": interface, "warnings": warnings, "bss": bss})
+fn sort(list: &mut [BssInfo], by: Sort) {
+    match by {
+        Sort::Rssi => list.sort_by_key(|b| -b.rssi_dbm),
+        Sort::Channel => list.sort_by_key(|b| (b.freq_mhz, -b.rssi_dbm)),
+        Sort::Ssid => list.sort_by(|a, b| a.ssid.cmp(&b.ssid).then(b.rssi_dbm.cmp(&a.rssi_dbm))),
+    }
 }
 
-fn do_scan(opts: &ScanOptions) -> Result<(String, Vec<RawBss>, Vec<String>), String> {
-    let o = wifi_scan::scan(opts).map_err(|e| e.to_string())?;
-    Ok((o.interface, o.bss, o.warnings))
+fn die(msg: impl std::fmt::Display) -> ! {
+    eprintln!("error: {msg}");
+    std::process::exit(1)
 }
 
 #[derive(Serialize)]
@@ -287,10 +290,9 @@ fn handle(
         // what `scan --json` prints (default sort: RSSI)
         "/bss" => match serve_scan(last, iface) {
             Ok(o) => {
-                let mut bss: Vec<BssInfo> = o.bss.iter().map(|r| analyze(r, oui)).collect();
-                bss.sort_by_key(|b| -b.rssi_dbm);
-                let json = snapshot_json(&o.interface, &o.warnings, &bss);
-                ("200 OK", json.to_string())
+                let mut snap = Snapshot::new(o.interface, &o.bss, o.warnings, oui);
+                sort(&mut snap.bss, Sort::Rssi);
+                ("200 OK", serde_json::to_string(&snap).unwrap())
             }
             Err(e) => ("500 Internal Server Error", e),
         },
@@ -331,16 +333,82 @@ fn handle(
 
 // ponytail: no auth, read-only, thread per connection — meant for a trusted network.
 fn serve(listen: &str, default_iface: Option<String>, oui: Option<OuiDb>) {
-    let listener = std::net::TcpListener::bind(listen).unwrap_or_else(|e| {
-        eprintln!("cannot listen on {listen}: {e}");
-        std::process::exit(1)
-    });
+    let listener = std::net::TcpListener::bind(listen)
+        .unwrap_or_else(|e| die(format!("cannot listen on {listen}: {e}")));
     eprintln!("wifisight probe listening on http://{listen}");
     let last: &'static std::sync::Mutex<LastScan> = Box::leak(Box::default());
     let oui: &'static Option<OuiDb> = Box::leak(Box::new(oui));
     for stream in listener.incoming().flatten() {
         let iface = default_iface.clone();
         std::thread::spawn(move || handle(stream, iface, last, oui.as_ref()));
+    }
+}
+
+fn cmd_scan(opts: ScanOptions, json: bool, raw: bool, by: Sort, oui: Option<&OuiDb>) {
+    let o = wifi_scan::scan(&opts).unwrap_or_else(|e| die(e));
+    for w in &o.warnings {
+        eprintln!("warning: {w}");
+    }
+    if raw {
+        println!("{}", serde_json::to_string_pretty(&o.bss).unwrap());
+        return;
+    }
+    let mut snap = Snapshot::new(o.interface, &o.bss, o.warnings, oui);
+    sort(&mut snap.bss, by);
+    if json {
+        println!("{}", serde_json::to_string_pretty(&snap).unwrap());
+    } else {
+        eprintln!("{} BSS on {}", snap.bss.len(), snap.interface);
+        print_table(&snap.bss);
+    }
+}
+
+fn cmd_watch(
+    opts: ScanOptions,
+    interval: f64,
+    out: Option<std::path::PathBuf>,
+    full: bool,
+    count: u64,
+    oui: Option<&OuiDb>,
+) {
+    let mut w: Box<dyn Write> = match &out {
+        Some(p) => Box::new(
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(p)
+                .unwrap_or_else(|e| die(format!("cannot open {}: {e}", p.display()))),
+        ),
+        None => Box::new(std::io::stdout()),
+    };
+    let mut n = 0u64;
+    loop {
+        let t0 = Instant::now();
+        match wifi_scan::scan(&opts) {
+            Ok(o) => {
+                let snap = Snapshot::new(o.interface, &o.bss, o.warnings, oui);
+                let bss = if full {
+                    serde_json::to_value(&snap.bss)
+                } else {
+                    serde_json::to_value(snap.bss.iter().map(compact).collect::<Vec<_>>())
+                }
+                .unwrap();
+                // keys predate `Snapshot` (ts / iface); kept for existing JSONL consumers
+                let line = serde_json::json!({"ts": snap.timestamp_ms, "iface": snap.interface, "warnings": snap.warnings, "bss": bss});
+                let _ = writeln!(w, "{line}");
+                let _ = w.flush();
+                if out.is_some() {
+                    eprintln!("[{}] {} BSS", n + 1, snap.bss.len());
+                }
+            }
+            Err(e) => eprintln!("scan error: {e}"),
+        }
+        n += 1;
+        if count > 0 && n >= count {
+            break;
+        }
+        let wait = Duration::from_secs_f64(interval).saturating_sub(t0.elapsed());
+        std::thread::sleep(wait);
     }
 }
 
@@ -357,24 +425,15 @@ fn main() {
         .map(|t| OuiDb::from_ieee_csv(&t));
     match cli.cmd {
         Cmd::Serve { listen, iface } => serve(&listen, iface, oui),
-        Cmd::Link { iface } => match wifi_scan::link(iface.as_deref()) {
-            Ok(l) => println!("{}", serde_json::to_string(&l).unwrap()),
-            Err(e) => {
-                eprintln!("error: {e}");
-                std::process::exit(1);
+        Cmd::Link { iface } => {
+            let l = wifi_scan::link(iface.as_deref()).unwrap_or_else(|e| die(e));
+            println!("{}", serde_json::to_string(&l).unwrap());
+        }
+        Cmd::Interfaces => {
+            for i in wifi_scan::interfaces().unwrap_or_else(|e| die(e)) {
+                println!("{}\t{}\t{}", i.id, i.description, i.mac.unwrap_or_default());
             }
-        },
-        Cmd::Interfaces => match wifi_scan::interfaces() {
-            Ok(list) => {
-                for i in list {
-                    println!("{}\t{}\t{}", i.id, i.description, i.mac.unwrap_or_default());
-                }
-            }
-            Err(e) => {
-                eprintln!("error: {e}");
-                std::process::exit(1);
-            }
-        },
+        }
         Cmd::Scan {
             iface,
             no_trigger,
@@ -387,35 +446,7 @@ fn main() {
                 trigger: !no_trigger,
                 wait: true,
             };
-            let (ifname, raws, warnings) = do_scan(&opts).unwrap_or_else(|e| {
-                eprintln!("error: {e}");
-                std::process::exit(1);
-            });
-            for w in &warnings {
-                eprintln!("warning: {w}");
-            }
-            if raw {
-                println!("{}", serde_json::to_string_pretty(&raws).unwrap());
-                return;
-            }
-            let mut list: Vec<BssInfo> = raws.iter().map(|r| analyze(r, oui.as_ref())).collect();
-            match sort.as_str() {
-                "channel" => list.sort_by_key(|b| (b.freq_mhz, -b.rssi_dbm)),
-                "ssid" => {
-                    list.sort_by(|a, b| a.ssid.cmp(&b.ssid).then(b.rssi_dbm.cmp(&a.rssi_dbm)))
-                }
-                _ => list.sort_by_key(|b| -b.rssi_dbm),
-            }
-            if json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&snapshot_json(&ifname, &warnings, &list))
-                        .unwrap()
-                );
-            } else {
-                eprintln!("{} BSS on {}", list.len(), ifname);
-                print_table(&list);
-            }
+            cmd_scan(opts, json, raw, sort, oui.as_ref());
         }
         Cmd::Watch {
             iface,
@@ -429,47 +460,7 @@ fn main() {
                 trigger: true,
                 wait: true,
             };
-            let mut w: Box<dyn Write> = match &out {
-                Some(p) => Box::new(
-                    std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(p)
-                        .unwrap_or_else(|e| {
-                            eprintln!("cannot open {}: {e}", p.display());
-                            std::process::exit(1)
-                        }),
-                ),
-                None => Box::new(std::io::stdout()),
-            };
-            let mut n = 0u64;
-            loop {
-                let t0 = Instant::now();
-                match do_scan(&opts) {
-                    Ok((ifname, raws, warnings)) => {
-                        let list: Vec<BssInfo> =
-                            raws.iter().map(|r| analyze(r, oui.as_ref())).collect();
-                        let line = if full {
-                            serde_json::json!({"ts": now_ms() as u64, "iface": ifname, "warnings": warnings, "bss": list})
-                        } else {
-                            let c: Vec<_> = list.iter().map(compact).collect();
-                            serde_json::json!({"ts": now_ms() as u64, "iface": ifname, "warnings": warnings, "bss": c})
-                        };
-                        let _ = writeln!(w, "{line}");
-                        let _ = w.flush();
-                        if out.is_some() {
-                            eprintln!("[{}] {} BSS", n + 1, list.len());
-                        }
-                    }
-                    Err(e) => eprintln!("scan error: {e}"),
-                }
-                n += 1;
-                if count > 0 && n >= count {
-                    break;
-                }
-                let wait = Duration::from_secs_f64(interval).saturating_sub(t0.elapsed());
-                std::thread::sleep(wait);
-            }
+            cmd_watch(opts, interval, out, full, count, oui.as_ref());
         }
     }
 }

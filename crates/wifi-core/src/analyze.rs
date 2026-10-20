@@ -5,6 +5,23 @@ use crate::oui::{is_locally_administered, OuiDb};
 use crate::rates::{rate, Phy};
 use crate::security::classify;
 
+impl Snapshot {
+    /// Analyse every BSS of one scan, stamped with the current time.
+    pub fn new(
+        interface: String,
+        raws: &[RawBss],
+        warnings: Vec<String>,
+        oui: Option<&OuiDb>,
+    ) -> Self {
+        Snapshot {
+            timestamp_ms: now_ms(),
+            interface,
+            bss: raws.iter().map(|r| analyze(r, oui)).collect(),
+            warnings,
+        }
+    }
+}
+
 /// Turn a scanner result into a fully analysed [`BssInfo`].
 pub fn analyze(raw: &RawBss, oui: Option<&OuiDb>) -> BssInfo {
     let els = Elements::parse(&raw.ies);
@@ -229,14 +246,22 @@ fn generation(band: Band, c: &Caps) -> &'static str {
 }
 
 /// Max PHY rate (Mbps, unrounded) and spatial streams.
-fn max_rate(band: Band, width: u32, supported_rates: &[f32], c: &Caps) -> (Option<f64>, Option<u8>) {
+fn max_rate(
+    band: Band,
+    width: u32,
+    supported_rates: &[f32],
+    c: &Caps,
+) -> (Option<f64>, Option<u8>) {
     if let Some(e) = c.eht {
         let nss = if e.nss > 0 {
             e.nss
         } else {
             c.he.map(|h| h.nss).unwrap_or(1)
         };
-        (Some(rate(Phy::Eht, width.min(320), e.max_mcs, nss, true)), Some(nss))
+        (
+            Some(rate(Phy::Eht, width.min(320), e.max_mcs, nss, true)),
+            Some(nss),
+        )
     } else if let Some(h) = c.he {
         let w = width.min(160);
         let nss = if w == 160 {
