@@ -21,7 +21,7 @@ export function keepFocus(root: HTMLElement, attrs: string[], rebuild: () => voi
   const hit = a && root.contains(a) ? attrs.find((k) => a.hasAttribute(k)) : undefined;
   const val = hit ? a!.getAttribute(hit)! : null;
   rebuild();
-  if (hit && val != null) root.querySelector<HTMLElement>(`[${hit}="${CSS.escape(val)}"]`)?.focus();
+  if (hit && val != null) root.querySelector<HTMLElement>(`[${hit}="${CSS.escape(val)}"]`)?.focus({ preventScroll: true }); // the rebuilt element sits where the old one was: no scrolling
 }
 
 /** Light UI? Settings › Theme wins over the OS setting. */
