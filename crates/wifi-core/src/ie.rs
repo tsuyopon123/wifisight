@@ -488,10 +488,26 @@ pub fn vendor_ap_name(v: &[u8]) -> Option<String> {
         | ([0xdc, 0x08, 0x56], 0x01) // Alcatel-Lucent
         | ([0x84, 0x80, 0x94], 0x00) // Meter
         | ([0x48, 0xd0, 0x17], 0x02) // Telecom Infra Project
-        | ([0x3c, 0xb9, 0xa6], 0x01) => p, // Belden
+        | ([0x3c, 0xb9, 0xa6], 0x01) // Belden
+        | ([0x8c, 0xea, 0x1b], 0x01) => p, // Edgecore
         // type, subtype, one unknown byte, then the name
         ([0x00, 0x0b, 0x86], 0x01) if p.first() == Some(&0x03) => p.get(2..)?, // Aruba (seen on AP-535)
         ([0x00, 0xe0, 0xfc], _) if p.first() == Some(&0x01) => p.get(2..)?,    // Huawei (any type)
+        // Aruba subtype 2 (hidden BSS): 14-byte header, then type/flag/length TLVs; 0x14 = AP name
+        // ponytail: header length seen on two APs only; a different one just yields None
+        ([0x00, 0x0b, 0x86], 0x01) if p.first() == Some(&0x02) => {
+            let mut b = p.get(14..)?;
+            loop {
+                let [t, _, n, rest @ ..] = b else {
+                    return None;
+                };
+                let (v, next) = rest.split_at(rest.len().min(*n as usize));
+                if *t == 0x14 {
+                    break v;
+                }
+                b = next;
+            }
+        }
         // Aerohive: type 33, version, subtype, length-prefixed name
         ([0x00, 0x19, 0x77], 33) => len_prefixed(p.get(2..)?)?,
         // Extreme WiNG: type 1, 7 unknown bytes, length-prefixed name
@@ -1229,6 +1245,16 @@ mod tests {
             ("000c420000020102010c0000000000000000000061", Some("a")),
         ];
         for (h, want) in mikrotik {
+            assert_eq!(vendor_ap_name(&unhex(h)).as_deref(), want, "{h}");
+        }
+        // seen in the field: Edgecore, and Aruba subtype 2 on hidden BSSes (hash TLV, then name TLV)
+        let more = [
+            ("8cea1b0161702d3030352d303633", Some("ap-005-063")),
+            ("000b86010208000b48b4c36093310000000028001f643636313037396639613930333433306632626335306531313662376661311400083532323477696669", Some("5224wifi")),
+            ("000b86010208001bf061c0697eb00001000028011f306365323462346234363836353964663435313564363966333633333731621400053631352d31", Some("615-1")),
+            ("000b8601040812", None),
+        ];
+        for (h, want) in more {
             assert_eq!(vendor_ap_name(&unhex(h)).as_deref(), want, "{h}");
         }
     }
