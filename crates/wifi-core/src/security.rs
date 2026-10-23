@@ -81,11 +81,7 @@ pub fn akm_name(oui: &[u8], t: u8) -> String {
 }
 
 fn suite(d: &[u8], off: usize) -> Option<(&[u8], u8)> {
-    if d.len() >= off + 4 {
-        Some((&d[off..off + 3], d[off + 3]))
-    } else {
-        None
-    }
+    d.get(off..off + 4).map(|s| (&s[..3], s[3]))
 }
 
 /// Parse an RSN element body (also works for the WPA1 vendor IE body after OUI+type).
@@ -125,10 +121,8 @@ pub fn parse_rsn(d: &[u8]) -> Option<Rsn> {
     for _ in 0..n {
         if let Some((o, t)) = suite(d, off) {
             r.akms.push(akm_name(o, t));
-            if o == OUI_IEEE {
-                r.akm_ids.push(t);
-            } else if o == OUI_MICROSOFT {
-                // map WPA1 AKMs onto IEEE ids for classification
+            // WPA1 (Microsoft OUI) AKM numbers line up with the IEEE ones used for classification
+            if o == OUI_IEEE || o == OUI_MICROSOFT {
                 r.akm_ids.push(t);
             }
         }
@@ -200,7 +194,7 @@ pub fn classify(els: &Elements, capability: Option<u16>) -> Security {
         .as_ref()
         .map(|r| r.akms.iter().any(|a| a == "OSEN"))
         .unwrap_or(false);
-    let mfpr = sec.pmf == "required";
+    let mfpr = rsn.as_ref().is_some_and(|r| r.mfpr);
 
     sec.label = if rsn.is_some() {
         if suite_b {
@@ -251,18 +245,7 @@ pub fn classify(els: &Elements, capability: Option<u16>) -> Security {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn rsn_ie(akms: &[u8], caps: u16) -> Vec<u8> {
-        let mut v = vec![1, 0, 0x00, 0x0f, 0xac, 4, 1, 0, 0x00, 0x0f, 0xac, 4];
-        v.extend_from_slice(&(akms.len() as u16).to_le_bytes());
-        for a in akms {
-            v.extend_from_slice(&[0x00, 0x0f, 0xac, *a]);
-        }
-        v.extend_from_slice(&caps.to_le_bytes());
-        let mut ie = vec![48, v.len() as u8];
-        ie.extend(v);
-        ie
-    }
+    use crate::ie_builder::IeBuilder;
 
     #[test]
     fn labels() {
@@ -276,7 +259,7 @@ mod tests {
             (&[12], 0xc0, "WPA3-Enterprise 192-bit", "required"),
         ];
         for (akms, caps, label, pmf) in cases {
-            let ie = rsn_ie(akms, *caps);
+            let ie = IeBuilder::new().rsn(akms, *caps).build();
             let els = Elements::parse(&ie);
             let s = classify(&els, Some(0x0011));
             assert_eq!(&s.label, label);

@@ -91,12 +91,12 @@ fn convert(n: &CWNetwork, connected_bssid: Option<&str>, redacted: &mut bool) ->
                 }
             }
         };
-        let width = match ch.channelWidth() {
-            CWChannelWidth::Width40MHz => Some(40),
-            CWChannelWidth::Width80MHz => Some(80),
-            CWChannelWidth::Width160MHz => Some(160),
-            _ => Some(20),
-        };
+        let width = Some(match ch.channelWidth() {
+            CWChannelWidth::Width40MHz => 40,
+            CWChannelWidth::Width80MHz => 80,
+            CWChannelWidth::Width160MHz => 160,
+            _ => 20,
+        });
         let freq = channel_to_freq(band, num as u32).unwrap_or(0);
         let ssid = n.ssidData().map(|d| d.to_vec());
         let bssid_s = ns(n.bssid());

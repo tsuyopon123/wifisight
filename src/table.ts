@@ -1,5 +1,5 @@
 import type { Track } from "./types";
-import { esc, fmtAgo, fmtRate, isDfs, signalColor, ssidLabel, vendorHtml } from "./util";
+import { csvCell, esc, fmtAgo, fmtRate, isDfs, load, openColumnPicker, save, signalColor, ssidLabel, vendorHtml } from "./util";
 
 interface Col {
   key: string;
@@ -14,7 +14,7 @@ interface Col {
 
 const loadPct = (t: Track) => t.info.bssLoad?.channelUtilizationPct ?? -1;
 
-export const COLUMNS: Col[] = [
+const COLUMNS: Col[] = [
   {
     key: "ssid",
     label: "SSID",
@@ -113,7 +113,7 @@ export const COLUMNS: Col[] = [
     },
     text: (t) => [t.info.features.rrm11k ? "k" : "", t.info.features.bssTransition11v ? "v" : "", t.info.features.ft11r ? "r" : ""].join(""),
   },
-  { key: "cc", label: "CC", title: "Country code", sort: (t) => t.info.country ?? "", html: (t) => t.info.country ?? "", text: (t) => t.info.country ?? "" },
+  { key: "cc", label: "CC", title: "Country code", sort: (t) => t.info.country ?? "", html: (t) => esc(t.info.country ?? ""), text: (t) => t.info.country ?? "" },
   {
     key: "seen",
     label: "Last Seen",
@@ -133,10 +133,10 @@ interface Layout {
 const LS_KEY = "wifisight.columns";
 const defaults = (): Layout => ({ order: COLUMNS.map((c) => c.key), hidden: [], widths: {} });
 
-export const layout: Layout = (() => {
+const layout: Layout = (() => {
   const d = defaults();
   try {
-    const s = JSON.parse(localStorage.getItem(LS_KEY) ?? "null") as Layout | null;
+    const s = JSON.parse(load(LS_KEY) ?? "null") as Layout | null;
     if (!s) return d;
     // drop unknown keys, append columns added since the layout was saved
     const order = s.order.filter((k) => d.order.includes(k));
@@ -146,22 +146,20 @@ export const layout: Layout = (() => {
   }
 })();
 
-export function saveLayout() {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(layout));
-  } catch {}
+function saveLayout() {
+  save(LS_KEY, JSON.stringify(layout));
 }
 
-export function resetLayout() {
+function resetLayout() {
   Object.assign(layout, defaults());
   saveLayout();
 }
 
-export function visibleCols(): Col[] {
+function visibleCols(): Col[] {
   return layout.order.filter((k) => !layout.hidden.includes(k)).map((k) => COLUMNS.find((c) => c.key === k)!);
 }
 
-export function toggleCol(key: string) {
+function toggleCol(key: string) {
   const h = layout.hidden;
   if (h.includes(key)) h.splice(h.indexOf(key), 1);
   else if (visibleCols().length > 1) h.push(key);
@@ -169,7 +167,7 @@ export function toggleCol(key: string) {
 }
 
 /** Move `from` to `to`'s position (after it when moving right, before it when moving left). */
-export function moveCol(from: string, to: string) {
+function moveCol(from: string, to: string) {
   const o = layout.order;
   const right = o.indexOf(from) < o.indexOf(to);
   o.splice(o.indexOf(from), 1);
@@ -228,10 +226,7 @@ export function renderBody(tbody: HTMLElement, rows: Track[], st: TableState, no
 }
 
 export function toCsv(rows: Track[]): string {
-  const q = (v: string | number) => {
-    const s = String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
+  const q = csvCell;
   const extra = ["freq_mhz", "center_freq_mhz", "min_rssi", "max_rssi", "akm", "pairwise", "pmf", "generation", "rcoi", "first_seen"];
   const cols = visibleCols();
   const head = [...cols.map((c) => c.label), ...extra].map(q).join(",");
@@ -253,4 +248,80 @@ export function toCsv(rows: Track[]): string {
       .join(","),
   );
   return [head, ...lines].join("\n") + "\n";
+}
+
+/**
+ * Column layout by mouse on the table head: drag a header to reorder, drag its right edge to resize
+ * (double-click it to reset), right-click for the show/hide popover. Returns "a resize is in progress",
+ * so the caller's header click (sort) can ignore the click that ends a resize.
+ */
+export function bindColumns(table: HTMLElement, pop: HTMLElement, onChange: () => void): () => boolean {
+  const thead = table.querySelector("thead")!;
+  let resizing = false;
+  thead.ondragstart = (e) => {
+    if (resizing) return e.preventDefault();
+    e.dataTransfer!.setData("text/plain", (e.target as HTMLElement).dataset.sort!);
+  };
+  thead.ondragover = (e) => e.preventDefault();
+  thead.ondrop = (e) => {
+    e.preventDefault();
+    const to = (e.target as HTMLElement).closest("th")?.dataset.sort;
+    const from = e.dataTransfer!.getData("text/plain");
+    if (to && from && from !== to) {
+      moveCol(from, to);
+      onChange();
+    }
+  };
+  thead.onmousedown = (e) => {
+    const th = (e.target as HTMLElement).closest(".rz")?.parentElement;
+    if (!th) return;
+    resizing = true;
+    const key = th.dataset.sort!;
+    const x0 = e.clientX, w0 = th.getBoundingClientRect().width;
+    const move = (ev: MouseEvent) => {
+      const w = Math.max(32, Math.round(w0 + ev.clientX - x0));
+      layout.widths[key] = w;
+      // patch the live cells instead of a full render; the next render picks up layout.widths
+      const head = thead.querySelector<HTMLElement>(`th[data-sort="${key}"]`);
+      if (!head) return;
+      const i = [...head.parentElement!.children].indexOf(head) + 1;
+      for (const el of [head, ...table.querySelectorAll<HTMLElement>(`tbody td:nth-child(${i})`)]) {
+        el.style.width = el.style.minWidth = el.style.maxWidth = `${w}px`;
+      }
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      saveLayout();
+      setTimeout(() => (resizing = false)); // swallow the click that follows mouseup
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
+  thead.ondblclick = (e) => {
+    const key = (e.target as HTMLElement).closest(".rz")?.parentElement?.dataset.sort;
+    if (!key) return;
+    delete layout.widths[key];
+    saveLayout();
+    onChange();
+  };
+  thead.oncontextmenu = (e) => {
+    e.preventDefault();
+    openColumnPicker(pop, COLUMNS, layout.hidden, e.clientX, e.clientY, `<hr /><button data-reset>Reset columns</button>`);
+  };
+  pop.onclick = (e) => {
+    e.stopPropagation();
+    if (!(e.target as HTMLElement).closest("[data-reset]")) return;
+    resetLayout();
+    pop.hidden = true;
+    onChange();
+  };
+  pop.onchange = (e) => {
+    const cb = e.target as HTMLInputElement;
+    toggleCol(cb.dataset.col!);
+    cb.checked = !layout.hidden.includes(cb.dataset.col!); // last visible column can't be hidden
+    onChange();
+  };
+  document.addEventListener("click", () => (pop.hidden = true));
+  return () => resizing;
 }

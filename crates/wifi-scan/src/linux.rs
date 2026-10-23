@@ -72,8 +72,14 @@ const NL80211_RATE_INFO_EHT_NSS: u16 = 20;
 const NL80211_SURVEY_INFO_FREQUENCY: u16 = 1;
 const NL80211_SURVEY_INFO_NOISE: u16 = 2;
 
-/// (ifindex, ifname, iftype, MAC) from NL80211_CMD_GET_INTERFACE.
-type IfaceInfo = (u32, String, u32, Option<[u8; 6]>);
+/// One entry of NL80211_CMD_GET_INTERFACE.
+#[derive(Clone)]
+struct IfaceInfo {
+    index: u32,
+    name: String,
+    iftype: u32,
+    mac: Option<[u8; 6]>,
+}
 
 struct Sock {
     fd: i32,
@@ -120,12 +126,28 @@ fn get<'a>(a: &[(u16, &'a [u8])], ty: u16) -> Option<&'a [u8]> {
 }
 
 fn u32_of(d: &[u8]) -> Option<u32> {
-    d.get(..4)
-        .map(|b| u32::from_ne_bytes([b[0], b[1], b[2], b[3]]))
+    Some(u32::from_ne_bytes(d.get(..4)?.try_into().ok()?))
 }
 
 fn u16_of(d: &[u8]) -> Option<u16> {
-    d.get(..2).map(|b| u16::from_ne_bytes([b[0], b[1]]))
+    Some(u16::from_ne_bytes(d.get(..2)?.try_into().ok()?))
+}
+
+fn mac_of(d: &[u8]) -> Option<[u8; 6]> {
+    d.get(..6)?.try_into().ok()
+}
+
+/// Netlink messages in one recv buffer: (type, seq, payload after the 16-byte header).
+fn messages(mut d: &[u8]) -> impl Iterator<Item = (u16, u32, &[u8])> {
+    std::iter::from_fn(move || {
+        let len = u32_of(d)? as usize;
+        if len < 16 || len > d.len() {
+            return None;
+        }
+        let msg = (u16_of(&d[4..])?, u32_of(&d[8..])?, &d[16..len]);
+        d = &d[align4(len).min(d.len())..];
+        Some(msg)
+    })
 }
 
 impl Sock {
@@ -230,26 +252,14 @@ impl Sock {
         let mut buf = vec![0u8; 256 * 1024];
         loop {
             let n = self.recv_raw(&mut buf)?;
-            let mut d = &buf[..n];
-            while d.len() >= 16 {
-                let len = u32::from_ne_bytes([d[0], d[1], d[2], d[3]]) as usize;
-                let ty = u16::from_ne_bytes([d[4], d[5]]);
-                let mseq = u32::from_ne_bytes([d[8], d[9], d[10], d[11]]);
-                if len < 16 || len > d.len() {
-                    break;
-                }
-                let payload = &d[16..len];
-                d = &d[align4(len).min(d.len())..];
+            for (ty, mseq, payload) in messages(&buf[..n]) {
                 if mseq != seq {
                     continue;
                 }
                 match ty {
                     NLMSG_DONE => return Ok(out),
                     NLMSG_ERROR => {
-                        let err = payload
-                            .get(..4)
-                            .map(|b| i32::from_ne_bytes([b[0], b[1], b[2], b[3]]))
-                            .unwrap_or(0);
+                        let err = u32_of(payload).unwrap_or(0) as i32;
                         if err == 0 {
                             return Ok(out);
                         }
@@ -324,11 +334,12 @@ impl Nl80211 {
             let name = String::from_utf8_lossy(name)
                 .trim_end_matches('\0')
                 .to_string();
-            let ty = get(&a, NL80211_ATTR_IFTYPE).and_then(u32_of).unwrap_or(0);
-            let mac = get(&a, NL80211_ATTR_MAC)
-                .filter(|m| m.len() >= 6)
-                .map(|m| [m[0], m[1], m[2], m[3], m[4], m[5]]);
-            out.push((idx, name, ty, mac));
+            out.push(IfaceInfo {
+                index: idx,
+                name,
+                iftype: get(&a, NL80211_ATTR_IFTYPE).and_then(u32_of).unwrap_or(0),
+                mac: get(&a, NL80211_ATTR_MAC).and_then(mac_of),
+            });
         }
         Ok(out)
     }
@@ -444,7 +455,7 @@ impl Nl80211 {
                 continue;
             };
             let b = attrs(bss);
-            let Some(mac) = get(&b, NL80211_BSS_BSSID).filter(|m| m.len() >= 6) else {
+            let Some(bssid) = get(&b, NL80211_BSS_BSSID).and_then(mac_of) else {
                 continue;
             };
             let freq = get(&b, NL80211_BSS_FREQUENCY).and_then(u32_of).unwrap_or(0);
@@ -462,7 +473,7 @@ impl Nl80211 {
                 .unwrap_or(&[])
                 .to_vec();
             out.push(RawBss {
-                bssid: [mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]],
+                bssid,
                 ssid: None,
                 freq_mhz: freq,
                 rssi_dbm: rssi,
@@ -478,9 +489,7 @@ impl Nl80211 {
         }
         Ok(out)
     }
-}
 
-impl Nl80211 {
     /// The AP we're associated with (a station interface has exactly one station entry).
     fn station(&mut self, ifindex: u32) -> Result<Option<LinkInfo>, ScanError> {
         let replies = self
@@ -494,7 +503,7 @@ impl Nl80211 {
             .map_err(|e| ScanError::Os(format!("GET_STATION: {e}")))?;
         Ok(replies.iter().find_map(|(_, p)| {
             let a = attrs(p);
-            let mac = get(&a, NL80211_ATTR_MAC).filter(|m| m.len() >= 6)?;
+            let mac = get(&a, NL80211_ATTR_MAC).and_then(mac_of)?;
             let info = attrs(get(&a, NL80211_ATTR_STA_INFO)?);
             let (tx_mbps, mcs, nss) = get(&info, NL80211_STA_INFO_TX_BITRATE)
                 .map(parse_rate)
@@ -503,7 +512,7 @@ impl Nl80211 {
                 .map(parse_rate)
                 .unwrap_or_default();
             Some(LinkInfo {
-                bssid: wifi_core::fmt_mac(&[mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]]),
+                bssid: wifi_core::fmt_mac(&mac),
                 ssid: None,
                 rssi_dbm: get(&info, NL80211_STA_INFO_SIGNAL)
                     .and_then(|d| d.first())
@@ -552,21 +561,18 @@ fn wait_scan_done(ev: &Sock, ifindex: u32, timeout: Duration) -> bool {
         let Ok(n) = ev.recv_raw(&mut buf) else {
             continue;
         };
-        let mut d = &buf[..n];
-        while d.len() >= 20 {
-            let len = u32::from_ne_bytes([d[0], d[1], d[2], d[3]]) as usize;
-            if len < 20 || len > d.len() {
-                break;
-            }
-            let cmd = d[16];
-            let a = attrs(&d[20..len]);
+        for (_, _, payload) in messages(&buf[..n]) {
+            // genetlink header: cmd, version, reserved(2)
+            let Some((&cmd, rest)) = payload.split_first() else {
+                continue;
+            };
+            let a = attrs(rest.get(3..).unwrap_or(&[]));
             let idx = get(&a, NL80211_ATTR_IFINDEX).and_then(u32_of);
             if (cmd == NL80211_CMD_NEW_SCAN_RESULTS || cmd == NL80211_CMD_SCAN_ABORTED)
                 && idx == Some(ifindex)
             {
                 return true;
             }
-            d = &d[align4(len).min(d.len())..];
         }
     }
     false
@@ -577,18 +583,19 @@ pub fn interfaces() -> Result<Vec<Interface>, ScanError> {
     Ok(nl
         .interfaces()?
         .into_iter()
-        .map(|(idx, name, ty, mac)| Interface {
-            id: name.clone(),
+        .map(|i| Interface {
+            id: i.name.clone(),
             description: format!(
-                "ifindex {idx}{}",
-                if ty == NL80211_IFTYPE_STATION {
+                "ifindex {}{}",
+                i.index,
+                if i.iftype == NL80211_IFTYPE_STATION {
                     ", station"
                 } else {
                     ""
                 }
             ),
-            name,
-            mac: mac.map(|m| wifi_core::fmt_mac(&m)),
+            name: i.name,
+            mac: i.mac.map(|m| wifi_core::fmt_mac(&m)),
         })
         .collect())
 }
@@ -597,10 +604,10 @@ pub fn interfaces() -> Result<Vec<Interface>, ScanError> {
 fn pick(nl: &mut Nl80211, name: Option<&str>) -> Result<IfaceInfo, ScanError> {
     let ifs = nl.interfaces()?;
     match name {
-        Some(name) => ifs.iter().find(|i| i.1 == name),
+        Some(name) => ifs.iter().find(|i| i.name == name),
         None => ifs
             .iter()
-            .find(|i| i.2 == NL80211_IFTYPE_STATION)
+            .find(|i| i.iftype == NL80211_IFTYPE_STATION)
             .or(ifs.first()),
     }
     .cloned()
@@ -609,14 +616,18 @@ fn pick(nl: &mut Nl80211, name: Option<&str>) -> Result<IfaceInfo, ScanError> {
 
 pub fn link(interface: Option<&str>) -> Result<Option<LinkInfo>, ScanError> {
     let mut nl = Nl80211::open()?;
-    let (ifindex, _, _, _) = pick(&mut nl, interface)?;
+    let iface = pick(&mut nl, interface)?;
     // ssid stays None: it is only in the BSS table, too heavy to dump every second
-    nl.station(ifindex)
+    nl.station(iface.index)
 }
 
 pub fn scan(opts: &ScanOptions) -> Result<ScanOutput, ScanError> {
     let mut nl = Nl80211::open()?;
-    let (ifindex, ifname, _, _) = pick(&mut nl, opts.interface.as_deref())?;
+    let IfaceInfo {
+        index: ifindex,
+        name: ifname,
+        ..
+    } = pick(&mut nl, opts.interface.as_deref())?;
     let mut warnings = Vec::new();
 
     if opts.trigger {
@@ -684,6 +695,25 @@ mod tests {
         assert_eq!(a.len(), 2);
         assert_eq!(u32_of(get(&a, 3).unwrap()), Some(7));
         assert_eq!(get(&a, 4).unwrap(), b"wlan0\0");
+    }
+
+    #[test]
+    fn netlink_messages() {
+        let msg = |ty: u16, seq: u32, body: &[u8]| {
+            let mut m = ((16 + body.len()) as u32).to_ne_bytes().to_vec();
+            m.extend_from_slice(&ty.to_ne_bytes());
+            m.extend_from_slice(&[0, 0]);
+            m.extend_from_slice(&seq.to_ne_bytes());
+            m.extend_from_slice(&[0; 4]);
+            m.extend_from_slice(body);
+            m.resize(align4(m.len()), 0);
+            m
+        };
+        let buf = [msg(30, 7, &[1, 2, 3]), msg(NLMSG_DONE, 8, &[])].concat();
+        let v: Vec<_> = messages(&buf).collect();
+        assert_eq!(v, vec![(30, 7, &[1u8, 2, 3][..]), (NLMSG_DONE, 8, &[][..])]);
+        // a length past the end stops the walk
+        assert_eq!(messages(&buf[..18]).count(), 0);
     }
 
     #[test]

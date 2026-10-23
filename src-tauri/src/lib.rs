@@ -1,11 +1,10 @@
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_updater::UpdaterExt;
-use wifi_core::{analyze, BssInfo, OuiDb};
+use wifi_core::{OuiDb, Snapshot};
 use wifi_scan::{Interface, LinkInfo, ScanOptions};
 
 const OUI_URL: &str = "https://standards-oui.ieee.org/oui/oui.csv";
@@ -20,15 +19,6 @@ struct AppState {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct Snapshot {
-    timestamp_ms: u64,
-    interface: String,
-    bss: Vec<BssInfo>,
-    warnings: Vec<String>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 struct PlatformInfo {
     os: &'static str,
     arch: &'static str,
@@ -39,11 +29,18 @@ struct PlatformInfo {
     installable: bool,
 }
 
-fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
+/// Run blocking work (scans, HTTP) off the async runtime.
+async fn blocking<T: Send + 'static>(
+    f: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// The probe address the UI sent, `None` when blank (= scan locally).
+fn probe_addr(probe: Option<String>) -> Option<String> {
+    probe.filter(|p| !p.trim().is_empty())
 }
 
 #[tauri::command]
@@ -66,8 +63,13 @@ fn platform_info(app: tauri::AppHandle, state: State<'_, AppState>) -> PlatformI
     }
 }
 
-/// GET JSON from an external probe (`wifisight-cli serve`). `probe` is "host:port" or a URL.
-fn probe_get<T: serde::de::DeserializeOwned>(probe: &str, path: &str) -> Result<T, String> {
+/// GET JSON from an external probe (`wifisight-cli serve`). `probe` is "host:port" or a URL;
+/// `iface` becomes `?iface=` (none = the probe's default interface).
+fn probe_get<T: serde::de::DeserializeOwned>(
+    probe: &str,
+    path: &str,
+    iface: Option<&str>,
+) -> Result<T, String> {
     let base = probe.trim().trim_end_matches('/');
     let url = if base.contains("://") {
         format!("{base}{path}")
@@ -79,8 +81,11 @@ fn probe_get<T: serde::de::DeserializeOwned>(probe: &str, path: &str) -> Result<
         .http_status_as_error(false)
         .build()
         .into();
-    let mut res = agent
-        .get(&url)
+    let mut req = agent.get(&url);
+    if let Some(i) = iface {
+        req = req.query("iface", i);
+    }
+    let mut res = req
         .call()
         .map_err(|e| format!("probe {base} unreachable: {e}"))?;
     let status = res.status();
@@ -99,37 +104,16 @@ fn probe_get<T: serde::de::DeserializeOwned>(probe: &str, path: &str) -> Result<
 /// Probe health check (`GET /`): app name, version, OS.
 #[tauri::command]
 async fn probe_info(probe: String) -> Result<serde_json::Value, String> {
-    tauri::async_runtime::spawn_blocking(move || probe_get(&probe, "/"))
-        .await
-        .map_err(|e| e.to_string())?
+    blocking(move || probe_get(&probe, "/", None)).await
 }
 
 #[tauri::command]
 async fn list_interfaces(probe: Option<String>) -> Result<Vec<Interface>, String> {
-    tauri::async_runtime::spawn_blocking(move || match probe.filter(|p| !p.trim().is_empty()) {
-        Some(p) => probe_get(&p, "/interfaces"),
+    blocking(move || match probe_addr(probe) {
+        Some(p) => probe_get(&p, "/interfaces", None),
         None => wifi_scan::interfaces().map_err(|e| e.to_string()),
     })
     .await
-    .map_err(|e| e.to_string())?
-}
-
-/// "?iface=<percent-encoded>" for probe requests, "" for the probe's default interface.
-fn iface_query(iface: Option<String>) -> String {
-    iface
-        .map(|i| {
-            let enc: String = i
-                .bytes()
-                .map(|c| match c {
-                    b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
-                        (c as char).to_string()
-                    }
-                    _ => format!("%{c:02X}"),
-                })
-                .collect();
-            format!("?iface={enc}")
-        })
-        .unwrap_or_default()
 }
 
 /// Current link of the interface (local or on the probe); polled every second, no scan.
@@ -138,12 +122,11 @@ async fn link_info(
     iface: Option<String>,
     probe: Option<String>,
 ) -> Result<Option<LinkInfo>, String> {
-    tauri::async_runtime::spawn_blocking(move || match probe.filter(|p| !p.trim().is_empty()) {
-        Some(p) => probe_get(&p, &format!("/link{}", iface_query(iface))),
+    blocking(move || match probe_addr(probe) {
+        Some(p) => probe_get(&p, "/link", iface.as_deref()),
         None => wifi_scan::link(iface.as_deref()).map_err(|e| e.to_string()),
     })
     .await
-    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -153,39 +136,34 @@ async fn scan(
     probe: Option<String>,
 ) -> Result<Snapshot, String> {
     let oui = state.oui.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let probe = probe.filter(|p| !p.trim().is_empty());
-        let (interface, raws, warnings) = if let Some(p) = probe {
-            let o: wifi_scan::ScanOutput = probe_get(&p, &format!("/scan{}", iface_query(iface)))?;
-            (format!("probe:{}", o.interface), o.bss, o.warnings)
-        } else {
-            let o = wifi_scan::scan(&ScanOptions {
+    blocking(move || {
+        let o = match probe_addr(probe) {
+            Some(p) => {
+                let o: wifi_scan::ScanOutput = probe_get(&p, "/scan", iface.as_deref())?;
+                wifi_scan::ScanOutput {
+                    interface: format!("probe:{}", o.interface),
+                    ..o
+                }
+            }
+            None => wifi_scan::scan(&ScanOptions {
                 interface: iface,
                 trigger: true,
                 wait: false,
             })
-            .map_err(|e| e.to_string())?;
-            (o.interface, o.bss, o.warnings)
+            .map_err(|e| e.to_string())?,
         };
         let db = oui.lock().unwrap();
-        let bss = raws.iter().map(|r| analyze(r, db.as_ref())).collect();
-        Ok(Snapshot {
-            timestamp_ms: now_ms(),
-            interface,
-            bss,
-            warnings,
-        })
+        Ok(Snapshot::new(o.interface, &o.bss, o.warnings, db.as_ref()))
     })
     .await
-    .map_err(|e| e.to_string())?
 }
 
 /// Download the IEEE OUI registry into the app data dir and load it.
 #[tauri::command]
 async fn update_oui_db(state: State<'_, AppState>) -> Result<usize, String> {
-    let path = state.data_dir.join("oui.csv");
+    let dir = state.data_dir.clone();
     let oui = state.oui.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    blocking(move || {
         let text = ureq::get(OUI_URL)
             .header("User-Agent", "wifisight")
             .call()
@@ -199,16 +177,13 @@ async fn update_oui_db(state: State<'_, AppState>) -> Result<usize, String> {
         if db.is_empty() {
             return Err("downloaded file did not contain OUI entries".into());
         }
-        if let Some(dir) = path.parent() {
-            let _ = std::fs::create_dir_all(dir);
-        }
-        std::fs::write(&path, &text).map_err(|e| e.to_string())?;
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("oui.csv"), &text).map_err(|e| e.to_string())?;
         let n = db.len();
         *oui.lock().unwrap() = Some(db);
         Ok(n)
     })
     .await
-    .map_err(|e| e.to_string())?
 }
 
 /// latest.json of the newest published release, betas included. The stable channel instead
@@ -264,9 +239,7 @@ async fn check_update(
 ) -> Result<Option<UpdateMetadata>, String> {
     let mut builder = webview.updater_builder();
     if beta {
-        let url = tauri::async_runtime::spawn_blocking(beta_manifest_url)
-            .await
-            .map_err(|e| e.to_string())??;
+        let url = blocking(beta_manifest_url).await?;
         builder = builder.endpoints(vec![url]).map_err(|e| e.to_string())?;
     }
     let updater = builder.build().map_err(|e| e.to_string())?;
@@ -386,4 +359,26 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running WiFiSight");
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{BufRead, BufReader, Write};
+
+    #[test]
+    fn probe_get_encodes_iface() {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = l.local_addr().unwrap().to_string();
+        let server = std::thread::spawn(move || {
+            let (s, _) = l.accept().unwrap();
+            let mut line = String::new();
+            BufReader::new(&s).read_line(&mut line).unwrap();
+            let _ = write!(&s, "HTTP/1.0 200 OK\r\nContent-Length: 4\r\n\r\nnull");
+            line
+        });
+        let r: Option<u8> = super::probe_get(&addr, "/link", Some("{ab cd}&x")).unwrap();
+        assert_eq!(r, None);
+        let line = server.join().unwrap();
+        assert!(line.starts_with("GET /link?iface=%7Bab%20cd%7D%26x "), "{line}");
+    }
 }

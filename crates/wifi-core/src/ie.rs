@@ -56,20 +56,17 @@ pub struct Element<'a> {
 #[derive(Debug, Clone, Default)]
 pub struct Elements<'a> {
     pub list: Vec<Element<'a>>,
-    /// Trailing bytes that could not be parsed (truncated element)
-    pub truncated: bool,
 }
 
 impl<'a> Elements<'a> {
     pub fn parse(buf: &'a [u8]) -> Self {
         let mut list = Vec::new();
         let mut i = 0usize;
-        let mut truncated = false;
+        // A truncated trailing element is dropped.
         while i + 2 <= buf.len() {
             let id = buf[i];
             let len = buf[i + 1] as usize;
             if i + 2 + len > buf.len() {
-                truncated = true;
                 break;
             }
             let raw = &buf[i + 2..i + 2 + len];
@@ -86,10 +83,7 @@ impl<'a> Elements<'a> {
             });
             i += 2 + len;
         }
-        if i < buf.len() && !truncated {
-            truncated = true;
-        }
-        Elements { list, truncated }
+        Elements { list }
     }
 
     pub fn get(&self, id: u8) -> Option<&'a [u8]> {
@@ -171,7 +165,7 @@ pub fn ht_op(d: &[u8]) -> Option<HtOp> {
 
 /// Decode a 16-bit MCS map with 2 bits per NSS (VHT / HE).
 /// `max_for` maps the 2-bit code to max MCS (None = not supported).
-pub fn mcs_map_nss(map: u16, max_for: impl Fn(u16) -> Option<u8>) -> (u8, u8) {
+fn mcs_map_nss(map: u16, max_for: impl Fn(u16) -> Option<u8>) -> (u8, u8) {
     let mut nss = 0u8;
     let mut mcs = 0u8;
     for i in 0..8 {
@@ -279,7 +273,6 @@ pub struct SixGhzOpInfo {
 
 #[derive(Debug, Clone, Default)]
 pub struct HeOp {
-    pub params: u32,
     pub bss_color: u8,
     pub bss_color_disabled: bool,
     pub twt_required: bool,
@@ -300,15 +293,9 @@ pub fn he_op(d: &[u8]) -> Option<HeOp> {
         off += 1;
     }
     let six_ghz = if params & (1 << 17) != 0 && d.len() >= off + 5 {
-        let w = match d[off + 1] & 0x3 {
-            0 => 20,
-            1 => 40,
-            2 => 80,
-            _ => 160,
-        };
         Some(SixGhzOpInfo {
             primary: d[off],
-            width: w,
+            width: 20 << (d[off + 1] & 0x3),
             ccfs0: d[off + 2],
             ccfs1: d[off + 3],
         })
@@ -316,7 +303,6 @@ pub fn he_op(d: &[u8]) -> Option<HeOp> {
         None
     };
     Some(HeOp {
-        params,
         bss_color: color & 0x3f,
         bss_color_disabled: color & 0x80 != 0,
         twt_required: params & (1 << 3) != 0,
@@ -331,15 +317,13 @@ pub struct EhtCap {
     pub max_mcs: u8,
 }
 
-/// `he_width_set` is needed because the EHT MCS map layout depends on it.
-pub fn eht_cap(d: &[u8], he_width_set: u8) -> Option<EhtCap> {
+pub fn eht_cap(d: &[u8]) -> Option<EhtCap> {
     // MAC cap (2) + PHY cap (9) + ≥3 bytes MCS map
     if d.len() < 14 {
         return None;
     }
     let phy = &d[2..11];
     let supports_320 = phy[0] & 0x02 != 0;
-    let _ = he_width_set;
     // ≤80 MHz map: 3 bytes (MCS 0-9, 10-11, 12-13), low nibble = Rx max NSS
     let m = &d[11..14];
     let nss = (m[0] & 0x0f).max(m[1] & 0x0f).max(m[2] & 0x0f);
@@ -372,11 +356,7 @@ pub fn eht_op(d: &[u8]) -> Option<EhtOp> {
     let params = d[0];
     if params & 0x01 != 0 && d.len() >= 8 {
         let w = match d[5] & 0x07 {
-            0 => 20,
-            1 => 40,
-            2 => 80,
-            3 => 160,
-            4 => 320,
+            c @ 0..=4 => 20 << c,
             _ => 20,
         };
         let dis = if params & 0x02 != 0 && d.len() >= 10 {
@@ -712,10 +692,6 @@ fn f(name: &str, value: impl Into<String>) -> IeField {
     }
 }
 
-fn width_name(w: u32) -> String {
-    format!("{w} MHz")
-}
-
 fn mac_at(d: &[u8], i: usize) -> Option<String> {
     d.get(i..i + 6)
         .map(|m| crate::model::fmt_mac(&m.try_into().unwrap()))
@@ -863,298 +839,312 @@ fn rnr_fields(d: &[u8]) -> Vec<IeField> {
 
 /// Human-readable decode of every element, for the details pane.
 pub fn describe_all(els: &Elements) -> Vec<IeView> {
-    let he_width_set = els
-        .get_ext(EXT_HE_CAP)
-        .and_then(he_cap)
-        .map(|c| c.width_set)
-        .unwrap_or(0);
     els.list
         .iter()
-        .map(|e| {
-            let mut fields = Vec::new();
-            let d = e.data;
-            match (e.id, e.ext_id) {
-                (EID_SSID, _) => {
-                    fields.push(f("SSID", String::from_utf8_lossy(d).to_string()));
-                }
-                (EID_SUPP_RATES, _) | (EID_EXT_SUPP_RATES, _) => {
-                    let (b, a) = rates(d);
-                    fields.push(f("Rates (Mbps)", fmt_rates(&a)));
-                    fields.push(f("Basic", fmt_rates(&b)));
-                }
-                (EID_DS_PARAMS, _) if !d.is_empty() => {
-                    fields.push(f("Current Channel", d[0].to_string()))
-                }
-                (EID_TIM, _) if d.len() >= 3 => {
-                    fields.push(f("DTIM Count", d[0].to_string()));
-                    fields.push(f("DTIM Period", d[1].to_string()));
-                }
-                (EID_COUNTRY, _) if d.len() >= 3 => {
-                    fields.push(f("Country", country(d).unwrap_or_default()));
-                    fields.push(f("Environment", format!("0x{:02x}", d[2])));
-                    for t in d[3..].chunks(3).filter(|t| t.len() == 3 && t[0] < 201) {
-                        fields.push(f(
-                            "Triplet",
-                            format!("first ch {} / {} ch / max {} dBm", t[0], t[1], t[2] as i8),
-                        ));
-                    }
-                }
-                (EID_BSS_LOAD, _) if d.len() >= 5 => {
-                    fields.push(f(
-                        "Station Count",
-                        u16::from_le_bytes([d[0], d[1]]).to_string(),
-                    ));
-                    fields.push(f(
-                        "Channel Utilization",
-                        format!("{:.1} % ({}/255)", d[2] as f32 / 2.55, d[2]),
-                    ));
-                    fields.push(f(
-                        "Avail. Admission Capacity",
-                        format!("{} ×32µs/s", u16::from_le_bytes([d[3], d[4]])),
-                    ));
-                }
-                (EID_POWER_CONSTRAINT, _) if !d.is_empty() => {
-                    fields.push(f("Local Power Constraint", format!("{} dB", d[0])))
-                }
-                (EID_TPC_REPORT, _) if d.len() >= 2 => {
-                    fields.push(f("Transmit Power", format!("{} dBm", d[0] as i8)));
-                    fields.push(f("Link Margin", format!("{} dB", d[1] as i8)));
-                }
-                (EID_HT_CAP, _) => {
-                    if let Some(c) = ht_cap(d) {
-                        fields.push(f("Capability Info", format!("0x{:04x}", c.info)));
-                        fields.push(f("40 MHz Supported", yn(c.width40)));
-                        fields.push(f("SGI 20/40", format!("{}/{}", yn(c.sgi20), yn(c.sgi40))));
-                        fields.push(f("Spatial Streams", c.nss.to_string()));
-                    }
-                }
-                (EID_HT_OP, _) => {
-                    if let Some(o) = ht_op(d) {
-                        fields.push(f("Primary Channel", o.primary.to_string()));
-                        fields.push(f(
-                            "Secondary Channel Offset",
-                            match o.secondary_offset {
-                                1 => "above",
-                                3 => "below",
-                                _ => "none",
-                            },
-                        ));
-                        fields.push(f(
-                            "STA Channel Width",
-                            if o.sta_width_any { "any" } else { "20 MHz" },
-                        ));
-                    }
-                }
-                (EID_RSN, _) => {
-                    if let Some(r) = crate::security::parse_rsn(d) {
-                        fields.push(f("Version", r.version.to_string()));
-                        fields.push(f("Group Cipher", r.group.clone().unwrap_or_default()));
-                        fields.push(f("Pairwise Ciphers", r.pairwise.join(", ")));
-                        fields.push(f("AKM Suites", r.akms.join(", ")));
-                        fields.push(f("Capabilities", format!("0x{:04x}", r.caps)));
-                        fields.push(f(
-                            "MFP Required / Capable",
-                            format!("{} / {}", yn(r.mfpr), yn(r.mfpc)),
-                        ));
-                        if let Some(g) = &r.group_mgmt {
-                            fields.push(f("Group Mgmt Cipher", g.clone()));
-                        }
-                    }
-                }
-                (EID_MOBILITY_DOMAIN, _) if d.len() >= 3 => {
-                    fields.push(f(
-                        "MDID",
-                        format!("0x{:04x}", u16::from_le_bytes([d[0], d[1]])),
-                    ));
-                    fields.push(f("FT over DS", yn(d[2] & 1 != 0)));
-                }
-                (EID_EXT_CAP, _) => {
-                    let bits: &[(usize, &str)] = &[
-                        (2, "Extended Channel Switching"),
-                        (19, "BSS Transition (11v)"),
-                        (31, "Interworking"),
-                        (46, "WNM Notification"),
-                        (62, "Opmode Notification"),
-                        (77, "TWT Requester"),
-                        (78, "TWT Responder"),
-                    ];
-                    let on: Vec<&str> = bits
-                        .iter()
-                        .filter(|(b, _)| ext_cap_bit(d, *b))
-                        .map(|(_, n)| *n)
-                        .collect();
-                    fields.push(f(
-                        "Enabled",
-                        if on.is_empty() {
-                            "-".into()
-                        } else {
-                            on.join(", ")
-                        },
-                    ));
-                }
-                (EID_INTERWORKING, _) if !d.is_empty() => {
-                    let ant = d[0] & 0x0f;
-                    let ant_s = match ant {
-                        0 => "Private",
-                        1 => "Private w/ guest",
-                        2 => "Chargeable public",
-                        3 => "Free public",
-                        4 => "Personal device",
-                        5 => "Emergency only",
-                        14 => "Test",
-                        15 => "Wildcard",
-                        _ => "Reserved",
-                    };
-                    fields.push(f("Access Network Type", format!("{ant} ({ant_s})")));
-                    fields.push(f("Internet", yn(d[0] & 0x10 != 0)));
-                }
-                (EID_ROAMING_CONSORTIUM, _) => {
-                    if !d.is_empty() {
-                        fields.push(f("ANQP OIs", d[0].to_string()));
-                    }
-                    for oi in roaming_consortium(d) {
-                        let label = rcoi_label(&oi)
-                            .map(|l| format!(" — {l}"))
-                            .unwrap_or_default();
-                        fields.push(f("OI", format!("{oi}{label}")));
-                    }
-                }
-                (EID_CISCO_CCX1, _) if d.len() >= 26 => {
-                    fields.push(f("Device Name", printable(&d[10..26])))
-                }
-                (EID_VHT_CAP, _) => {
-                    if let Some(c) = vht_cap(d) {
-                        fields.push(f("Capability Info", format!("0x{:08x}", c.info)));
-                        fields.push(f(
-                            "Supported Width Set",
-                            match c.supported_width_set {
-                                0 => "80 MHz",
-                                1 => "160 MHz",
-                                2 => "160, 80+80 MHz",
-                                _ => "reserved",
-                            },
-                        ));
-                        fields.push(f("SGI 80/160", format!("{}/{}", yn(c.sgi80), yn(c.sgi160))));
-                        fields.push(f("Rx NSS / Max MCS", format!("{} / {}", c.nss, c.max_mcs)));
-                    }
-                }
-                (EID_VHT_OP, _) => {
-                    if let Some(o) = vht_op(d) {
-                        fields.push(f(
-                            "Channel Width",
-                            match o.width {
-                                0 => "20/40 MHz",
-                                1 => "80/160/80+80 MHz",
-                                2 => "160 MHz (deprecated)",
-                                3 => "80+80 MHz (deprecated)",
-                                _ => "reserved",
-                            },
-                        ));
-                        fields.push(f("CCFS0", o.ccfs0.to_string()));
-                        fields.push(f("CCFS1", o.ccfs1.to_string()));
-                    }
-                }
-                (EID_VENDOR, _) => {
-                    fields.push(f("Type", vendor_ie_label(d)));
-                    if let Some(n) = vendor_ap_name(d) {
-                        fields.push(f("AP Name", n));
-                    }
-                    if d.len() > 3 && d[..3] == OUI_MICROSOFT && d[3] == 2 && d.len() > 6 {
-                        fields.push(f("WMM Subtype", d[4].to_string()));
-                    }
-                }
-                (EID_RNR, _) => fields = rnr_fields(d),
-                (_, Some(EXT_MULTI_LINK)) => fields = multi_link_fields(d),
-                (_, Some(EXT_HE_CAP)) => {
-                    if let Some(c) = he_cap(d) {
-                        let mut w = vec![];
-                        if c.width_set & 0x01 != 0 {
-                            w.push("40 MHz (2.4 GHz)");
-                        }
-                        if c.width_set & 0x02 != 0 {
-                            w.push("40/80 MHz (5/6 GHz)");
-                        }
-                        if c.width_set & 0x04 != 0 {
-                            w.push("160 MHz");
-                        }
-                        if c.width_set & 0x08 != 0 {
-                            w.push("80+80 MHz");
-                        }
-                        fields.push(f(
-                            "Channel Width Set",
-                            if w.is_empty() {
-                                "20 MHz".into()
-                            } else {
-                                w.join(", ")
-                            },
-                        ));
-                        fields.push(f(
-                            "Rx NSS / Max MCS (≤80)",
-                            format!("{} / {}", c.nss, c.max_mcs),
-                        ));
-                        if let Some(n) = c.nss160 {
-                            fields.push(f("Rx NSS (160)", n.to_string()));
-                        }
-                    }
-                }
-                (_, Some(EXT_HE_OP)) => {
-                    if let Some(o) = he_op(d) {
-                        fields.push(f(
-                            "BSS Color",
-                            format!(
-                                "{}{}",
-                                o.bss_color,
-                                if o.bss_color_disabled {
-                                    " (disabled)"
-                                } else {
-                                    ""
-                                }
-                            ),
-                        ));
-                        fields.push(f("TWT Required", yn(o.twt_required)));
-                        if let Some(s) = &o.six_ghz {
-                            fields.push(f("6 GHz Primary Channel", s.primary.to_string()));
-                            fields.push(f("6 GHz Channel Width", width_name(s.width)));
-                            fields.push(f(
-                                "6 GHz CCFS0 / CCFS1",
-                                format!("{} / {}", s.ccfs0, s.ccfs1),
-                            ));
-                        }
-                    }
-                }
-                (_, Some(EXT_EHT_CAP)) => {
-                    if let Some(c) = eht_cap(d, he_width_set) {
-                        fields.push(f("320 MHz (6 GHz)", yn(c.supports_320)));
-                        fields.push(f(
-                            "Rx NSS / Max MCS (≤80)",
-                            format!("{} / {}", c.nss, c.max_mcs),
-                        ));
-                    }
-                }
-                (_, Some(EXT_EHT_OP)) => {
-                    if let Some(o) = eht_op(d) {
-                        if let Some(w) = o.width {
-                            fields.push(f("Channel Width", width_name(w)));
-                            fields.push(f("CCFS0 / CCFS1", format!("{} / {}", o.ccfs0, o.ccfs1)));
-                        }
-                        if let Some(b) = o.disabled_subchannels {
-                            fields
-                                .push(f("Disabled Subchannels (puncturing)", format!("0x{b:04x}")));
-                        }
-                    }
-                }
-                _ => {}
-            }
-            IeView {
-                id: e.id,
-                ext_id: e.ext_id,
-                name: element_name(e.id, e.ext_id),
-                length: e.raw.len(),
-                hex: hex(e.raw),
-                fields,
-            }
+        .map(|e| IeView {
+            id: e.id,
+            ext_id: e.ext_id,
+            name: element_name(e.id, e.ext_id),
+            length: e.raw.len(),
+            hex: hex(e.raw),
+            fields: element_fields(e),
         })
         .collect()
+}
+
+fn element_fields(e: &Element) -> Vec<IeField> {
+    let d = e.data;
+    match (e.id, e.ext_id) {
+        (EID_SSID, _) => vec![f("SSID", String::from_utf8_lossy(d))],
+        (EID_SUPP_RATES, _) | (EID_EXT_SUPP_RATES, _) => {
+            let (b, a) = rates(d);
+            vec![f("Rates (Mbps)", fmt_rates(&a)), f("Basic", fmt_rates(&b))]
+        }
+        (EID_DS_PARAMS, _) if !d.is_empty() => vec![f("Current Channel", d[0].to_string())],
+        (EID_TIM, _) if d.len() >= 3 => vec![
+            f("DTIM Count", d[0].to_string()),
+            f("DTIM Period", d[1].to_string()),
+        ],
+        (EID_COUNTRY, _) if d.len() >= 3 => country_fields(d),
+        (EID_BSS_LOAD, _) if d.len() >= 5 => vec![
+            f(
+                "Station Count",
+                u16::from_le_bytes([d[0], d[1]]).to_string(),
+            ),
+            f(
+                "Channel Utilization",
+                format!("{:.1} % ({}/255)", d[2] as f32 / 2.55, d[2]),
+            ),
+            f(
+                "Avail. Admission Capacity",
+                format!("{} ×32µs/s", u16::from_le_bytes([d[3], d[4]])),
+            ),
+        ],
+        (EID_POWER_CONSTRAINT, _) if !d.is_empty() => {
+            vec![f("Local Power Constraint", format!("{} dB", d[0]))]
+        }
+        (EID_TPC_REPORT, _) if d.len() >= 2 => vec![
+            f("Transmit Power", format!("{} dBm", d[0] as i8)),
+            f("Link Margin", format!("{} dB", d[1] as i8)),
+        ],
+        (EID_HT_CAP, _) => ht_cap(d).map(ht_cap_fields).unwrap_or_default(),
+        (EID_HT_OP, _) => ht_op(d).map(ht_op_fields).unwrap_or_default(),
+        (EID_RSN, _) => rsn_fields(d),
+        (EID_MOBILITY_DOMAIN, _) if d.len() >= 3 => vec![
+            f(
+                "MDID",
+                format!("0x{:04x}", u16::from_le_bytes([d[0], d[1]])),
+            ),
+            f("FT over DS", yn(d[2] & 1 != 0)),
+        ],
+        (EID_EXT_CAP, _) => ext_cap_fields(d),
+        (EID_INTERWORKING, _) if !d.is_empty() => interworking_fields(d),
+        (EID_ROAMING_CONSORTIUM, _) => roaming_consortium_fields(d),
+        (EID_CISCO_CCX1, _) if d.len() >= 26 => vec![f("Device Name", printable(&d[10..26]))],
+        (EID_VHT_CAP, _) => vht_cap(d).map(vht_cap_fields).unwrap_or_default(),
+        (EID_VHT_OP, _) => vht_op(d).map(vht_op_fields).unwrap_or_default(),
+        (EID_VENDOR, _) => vendor_fields(d),
+        (EID_RNR, _) => rnr_fields(d),
+        (_, Some(EXT_MULTI_LINK)) => multi_link_fields(d),
+        (_, Some(EXT_HE_CAP)) => he_cap(d).map(he_cap_fields).unwrap_or_default(),
+        (_, Some(EXT_HE_OP)) => he_op(d).map(he_op_fields).unwrap_or_default(),
+        (_, Some(EXT_EHT_CAP)) => eht_cap(d)
+            .map(|c| {
+                vec![
+                    f("320 MHz (6 GHz)", yn(c.supports_320)),
+                    f(
+                        "Rx NSS / Max MCS (≤80)",
+                        format!("{} / {}", c.nss, c.max_mcs),
+                    ),
+                ]
+            })
+            .unwrap_or_default(),
+        (_, Some(EXT_EHT_OP)) => eht_op(d).map(eht_op_fields).unwrap_or_default(),
+        _ => vec![],
+    }
+}
+
+fn country_fields(d: &[u8]) -> Vec<IeField> {
+    let mut v = vec![
+        f("Country", country(d).unwrap_or_default()),
+        f("Environment", format!("0x{:02x}", d[2])),
+    ];
+    for t in d[3..].chunks(3).filter(|t| t.len() == 3 && t[0] < 201) {
+        v.push(f(
+            "Triplet",
+            format!("first ch {} / {} ch / max {} dBm", t[0], t[1], t[2] as i8),
+        ));
+    }
+    v
+}
+
+fn ht_cap_fields(c: HtCap) -> Vec<IeField> {
+    vec![
+        f("Capability Info", format!("0x{:04x}", c.info)),
+        f("40 MHz Supported", yn(c.width40)),
+        f("SGI 20/40", format!("{}/{}", yn(c.sgi20), yn(c.sgi40))),
+        f("Spatial Streams", c.nss.to_string()),
+    ]
+}
+
+fn ht_op_fields(o: HtOp) -> Vec<IeField> {
+    vec![
+        f("Primary Channel", o.primary.to_string()),
+        f(
+            "Secondary Channel Offset",
+            match o.secondary_offset {
+                1 => "above",
+                3 => "below",
+                _ => "none",
+            },
+        ),
+        f(
+            "STA Channel Width",
+            if o.sta_width_any { "any" } else { "20 MHz" },
+        ),
+    ]
+}
+
+fn rsn_fields(d: &[u8]) -> Vec<IeField> {
+    let Some(r) = crate::security::parse_rsn(d) else {
+        return vec![];
+    };
+    let mut v = vec![
+        f("Version", r.version.to_string()),
+        f("Group Cipher", r.group.unwrap_or_default()),
+        f("Pairwise Ciphers", r.pairwise.join(", ")),
+        f("AKM Suites", r.akms.join(", ")),
+        f("Capabilities", format!("0x{:04x}", r.caps)),
+        f(
+            "MFP Required / Capable",
+            format!("{} / {}", yn(r.mfpr), yn(r.mfpc)),
+        ),
+    ];
+    if let Some(g) = r.group_mgmt {
+        v.push(f("Group Mgmt Cipher", g));
+    }
+    v
+}
+
+/// Names of the set bits in `set`, or `none` when nothing is set.
+fn flag_names(set: impl Fn(usize) -> bool, names: &[(usize, &str)], none: &str) -> String {
+    let on: Vec<&str> = names
+        .iter()
+        .filter(|(b, _)| set(*b))
+        .map(|(_, n)| *n)
+        .collect();
+    if on.is_empty() {
+        none.into()
+    } else {
+        on.join(", ")
+    }
+}
+
+fn ext_cap_fields(d: &[u8]) -> Vec<IeField> {
+    let bits = [
+        (2, "Extended Channel Switching"),
+        (19, "BSS Transition (11v)"),
+        (31, "Interworking"),
+        (46, "WNM Notification"),
+        (62, "Opmode Notification"),
+        (77, "TWT Requester"),
+        (78, "TWT Responder"),
+    ];
+    vec![f("Enabled", flag_names(|b| ext_cap_bit(d, b), &bits, "-"))]
+}
+
+fn interworking_fields(d: &[u8]) -> Vec<IeField> {
+    let ant = d[0] & 0x0f;
+    let ant_s = match ant {
+        0 => "Private",
+        1 => "Private w/ guest",
+        2 => "Chargeable public",
+        3 => "Free public",
+        4 => "Personal device",
+        5 => "Emergency only",
+        14 => "Test",
+        15 => "Wildcard",
+        _ => "Reserved",
+    };
+    vec![
+        f("Access Network Type", format!("{ant} ({ant_s})")),
+        f("Internet", yn(d[0] & 0x10 != 0)),
+    ]
+}
+
+fn roaming_consortium_fields(d: &[u8]) -> Vec<IeField> {
+    let mut v = Vec::new();
+    if let Some(n) = d.first() {
+        v.push(f("ANQP OIs", n.to_string()));
+    }
+    for oi in roaming_consortium(d) {
+        let label = rcoi_label(&oi)
+            .map(|l| format!(" — {l}"))
+            .unwrap_or_default();
+        v.push(f("OI", format!("{oi}{label}")));
+    }
+    v
+}
+
+fn vht_cap_fields(c: VhtCap) -> Vec<IeField> {
+    vec![
+        f("Capability Info", format!("0x{:08x}", c.info)),
+        f(
+            "Supported Width Set",
+            match c.supported_width_set {
+                0 => "80 MHz",
+                1 => "160 MHz",
+                2 => "160, 80+80 MHz",
+                _ => "reserved",
+            },
+        ),
+        f("SGI 80/160", format!("{}/{}", yn(c.sgi80), yn(c.sgi160))),
+        f("Rx NSS / Max MCS", format!("{} / {}", c.nss, c.max_mcs)),
+    ]
+}
+
+fn vht_op_fields(o: VhtOp) -> Vec<IeField> {
+    vec![
+        f(
+            "Channel Width",
+            match o.width {
+                0 => "20/40 MHz",
+                1 => "80/160/80+80 MHz",
+                2 => "160 MHz (deprecated)",
+                3 => "80+80 MHz (deprecated)",
+                _ => "reserved",
+            },
+        ),
+        f("CCFS0", o.ccfs0.to_string()),
+        f("CCFS1", o.ccfs1.to_string()),
+    ]
+}
+
+fn vendor_fields(d: &[u8]) -> Vec<IeField> {
+    let mut v = vec![f("Type", vendor_ie_label(d))];
+    if let Some(n) = vendor_ap_name(d) {
+        v.push(f("AP Name", n));
+    }
+    if d.len() > 6 && d[..3] == OUI_MICROSOFT && d[3] == 2 {
+        v.push(f("WMM Subtype", d[4].to_string()));
+    }
+    v
+}
+
+fn he_cap_fields(c: HeCap) -> Vec<IeField> {
+    let widths = [
+        (0, "40 MHz (2.4 GHz)"),
+        (1, "40/80 MHz (5/6 GHz)"),
+        (2, "160 MHz"),
+        (3, "80+80 MHz"),
+    ];
+    let mut v = vec![
+        f(
+            "Channel Width Set",
+            flag_names(|b| c.width_set & (1 << b) != 0, &widths, "20 MHz"),
+        ),
+        f(
+            "Rx NSS / Max MCS (≤80)",
+            format!("{} / {}", c.nss, c.max_mcs),
+        ),
+    ];
+    if let Some(n) = c.nss160 {
+        v.push(f("Rx NSS (160)", n.to_string()));
+    }
+    v
+}
+
+fn he_op_fields(o: HeOp) -> Vec<IeField> {
+    let disabled = if o.bss_color_disabled {
+        " (disabled)"
+    } else {
+        ""
+    };
+    let mut v = vec![
+        f("BSS Color", format!("{}{disabled}", o.bss_color)),
+        f("TWT Required", yn(o.twt_required)),
+    ];
+    if let Some(s) = &o.six_ghz {
+        v.push(f("6 GHz Primary Channel", s.primary.to_string()));
+        v.push(f("6 GHz Channel Width", format!("{} MHz", s.width)));
+        v.push(f(
+            "6 GHz CCFS0 / CCFS1",
+            format!("{} / {}", s.ccfs0, s.ccfs1),
+        ));
+    }
+    v
+}
+
+fn eht_op_fields(o: EhtOp) -> Vec<IeField> {
+    let mut v = Vec::new();
+    if let Some(w) = o.width {
+        v.push(f("Channel Width", format!("{w} MHz")));
+        v.push(f("CCFS0 / CCFS1", format!("{} / {}", o.ccfs0, o.ccfs1)));
+    }
+    if let Some(b) = o.disabled_subchannels {
+        v.push(f("Disabled Subchannels (puncturing)", format!("0x{b:04x}")));
+    }
+    v
 }
 
 fn yn(b: bool) -> &'static str {
@@ -1264,7 +1254,6 @@ mod tests {
         let buf = [0u8, 4, b't', b'e', b's', b't', 1, 2, 0x82, 0x84, 3, 1, 6];
         let els = Elements::parse(&buf);
         assert_eq!(els.list.len(), 3);
-        assert!(!els.truncated);
         assert_eq!(els.get(EID_SSID).unwrap(), b"test");
         assert_eq!(els.get(EID_DS_PARAMS).unwrap(), &[6]);
     }
@@ -1272,9 +1261,7 @@ mod tests {
     #[test]
     fn truncated() {
         let buf = [0u8, 10, b'a'];
-        let els = Elements::parse(&buf);
-        assert!(els.truncated);
-        assert!(els.list.is_empty());
+        assert!(Elements::parse(&buf).list.is_empty());
     }
 
     fn unhex(s: &str) -> Vec<u8> {

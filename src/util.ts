@@ -1,5 +1,68 @@
 import type { BssInfo, Track } from "./types";
 
+export const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+
+/** localStorage read; null when storage is unavailable (private window, blocked site data). */
+export function load(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/** localStorage write (null removes); per-viewer conveniences only, so failures are ignored. */
+export function save(key: string, value: string | null) {
+  try {
+    if (value == null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/** Value of a CSS custom property on :root, e.g. cssVar("--accent"). */
+export function cssVar(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+/** Toggle button state: the "on" class and aria-pressed. */
+export function setOn(b: Element, on: boolean) {
+  b.classList.toggle("on", on);
+  b.setAttribute("aria-pressed", String(on));
+}
+
+/**
+ * Replace `el`'s content only when `html` changed, so a focused button keeps focus across re-renders.
+ * `focusAttrs`: also refocus the rebuilt element carrying the same attribute value (see keepFocus).
+ */
+export function setHtml(el: HTMLElement, html: string, focusAttrs: string[] = []) {
+  if (el.dataset.html === html) return;
+  keepFocus(el, focusAttrs, () => (el.innerHTML = html));
+  el.dataset.html = html;
+}
+
+/** Position a tooltip above-right of the pointer, inside a container `width` px wide. */
+export function placeTip(tip: HTMLElement, e: MouseEvent, width: number) {
+  tip.style.left = `${Math.min(e.offsetX + 14, width - tip.offsetWidth - 6)}px`;
+  tip.style.top = `${Math.max(4, e.offsetY - tip.offsetHeight - 10)}px`;
+}
+
+/** Show/hide-columns popover at (x, y): one checkbox per column (`data-col`), then `extra` HTML. */
+export function openColumnPicker(pop: HTMLElement, cols: { key: string; label: string }[], hidden: string[], x: number, y: number, extra = "") {
+  pop.innerHTML =
+    cols.map((c) => `<label class="check"><input type="checkbox" data-col="${c.key}"${hidden.includes(c.key) ? "" : " checked"} /> ${c.label}</label>`).join("") + extra;
+  pop.style.left = "0"; // measure at full width: where it sat last time may have squeezed it
+  pop.hidden = false;
+  pop.style.left = `${Math.min(x, innerWidth - pop.offsetWidth - 8)}px`;
+  pop.style.top = `${y}px`;
+}
+
+export function csvCell(v: unknown): string {
+  const s = v == null ? "" : String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
 export function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
@@ -25,7 +88,7 @@ export function keepFocus(root: HTMLElement, attrs: string[], rebuild: () => voi
 }
 
 /** Light UI? Settings › Theme wins over the OS setting. */
-export function isLight(): boolean {
+function isLight(): boolean {
   const t = document.documentElement.dataset.theme;
   return t ? t !== "dark" : !!window.matchMedia?.("(prefers-color-scheme: light)").matches;
 }
@@ -34,10 +97,13 @@ export function withAlpha(hsl: string, a: number): string {
   return hsl.replace(/^hsl\((.*)\)$/, `hsl($1 / ${a})`);
 }
 
+/** Signal class boundaries, good → bad (dBm), and the colour of each class (one more than boundaries). */
+export const SIGNAL_STEPS = [-60, -67, -75, -82];
+export const CLASS_VARS = ["--good", "--ok", "--fair", "--poor", "--bad"];
+
 export function signalColor(rssi: number): string {
-  const v = getComputedStyle(document.documentElement);
-  const k = rssi >= -60 ? "--good" : rssi >= -67 ? "--ok" : rssi >= -75 ? "--fair" : rssi >= -82 ? "--poor" : "--bad";
-  return v.getPropertyValue(k).trim();
+  const i = SIGNAL_STEPS.findIndex((t) => rssi >= t);
+  return cssVar(CLASS_VARS[i < 0 ? 4 : i]);
 }
 
 export function ssidLabel(b: BssInfo): string {

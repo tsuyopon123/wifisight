@@ -1,5 +1,4 @@
 //! Test helper: builds real 802.11 IE encodings for analysis tests.
-#![allow(dead_code)] // builders for IEs not every test uses yet
 
 #[derive(Default)]
 pub struct IeBuilder {

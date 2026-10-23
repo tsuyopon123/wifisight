@@ -18,7 +18,7 @@ import {
   type Sample,
 } from "./heatmap";
 import type { Band, BssInfo, Snapshot } from "./types";
-import { colorFor, esc, keepFocus, signalColor, ssidLabel } from "./util";
+import { $, CLASS_VARS, SIGNAL_STEPS, colorFor, cssVar, esc, keepFocus, load, openColumnPicker, placeTip, save, setHtml, setOn, signalColor, ssidLabel } from "./util";
 
 interface SurveyPoint {
   id: string;
@@ -92,27 +92,22 @@ const AP_VIEW_KEY = "wifisight.svAps";
 let apView: { hidden: string[]; sort: string; asc: boolean } = { hidden: ["ssid", "vendor", "band", "width", "bss", "pos"], sort: "best", asc: false };
 
 function saveApView() {
-  try {
-    localStorage.setItem(AP_VIEW_KEY, JSON.stringify(apView));
-  } catch {
-    /* storage unavailable */
-  }
+  save(AP_VIEW_KEY, JSON.stringify(apView));
 }
 
 type Metric = "signal" | "second" | "snr" | "cci" | "channel";
 
+const SIGNAL_LEGEND = [...SIGNAL_STEPS.map((s) => `≥${s}`), `<${SIGNAL_STEPS[SIGNAL_STEPS.length - 1]}`];
+
 // steps = class boundaries good → bad; `higher` = bigger is better
 const METRICS: Record<Metric, { label: string; unit: string; steps: number[]; higher: boolean; dbm: boolean; legend: string[] }> = {
-  signal: { label: "Signal", unit: "dBm", steps: [-60, -67, -75, -82], higher: true, dbm: true, legend: ["≥-60", "≥-67", "≥-75", "≥-82", "<-82"] },
-  second: { label: "2nd AP signal", unit: "dBm", steps: [-60, -67, -75, -82], higher: true, dbm: true, legend: ["≥-60", "≥-67", "≥-75", "≥-82", "<-82"] },
+  signal: { label: "Signal", unit: "dBm", steps: SIGNAL_STEPS, higher: true, dbm: true, legend: SIGNAL_LEGEND },
+  second: { label: "2nd AP signal", unit: "dBm", steps: SIGNAL_STEPS, higher: true, dbm: true, legend: SIGNAL_LEGEND },
   snr: { label: "SNR", unit: "dB", steps: [25, 20, 15, 10], higher: true, dbm: false, legend: ["≥25", "≥20", "≥15", "≥10", "<10"] },
   cci: { label: "Co-channel APs", unit: "APs", steps: [0.5, 1.5, 2.5, 3.5], higher: false, dbm: false, legend: ["0", "1", "2", "3", "4+"] },
   // categorical: value = primary channel frequency (MHz, unique across bands), one colour per channel
   channel: { label: "Strongest channel", unit: "", steps: [], higher: true, dbm: false, legend: [] },
 };
-const CLASS_VARS = ["--good", "--ok", "--fair", "--poor", "--bad"];
-
-const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const CELL_PX = 6;
 const DEFAULT_MASK = 0.15;
@@ -201,9 +196,12 @@ function layerBssids(): string[] {
   return scopeBssids().filter((b) => (sel.ap == null || apKey(b, bss[b].apName) === sel.ap) && (sel.bssid == null || b === sel.bssid));
 }
 
+/** AP name, or its first BSSID with the last digit masked (the AP's other BSSIDs differ there). */
+const apName = (b: BssInfo) => b.apName ?? b.bssid.slice(0, 16) + "x";
+
 function apLabel(key: string): string {
   const b = Object.values(project?.bss ?? {}).find((x) => apKey(x.bssid, x.apName) === key);
-  return b ? (b.apName ?? b.bssid.slice(0, 16) + "x") : key;
+  return b ? apName(b) : key;
 }
 
 /** Bands with a button (no "other") that carry the current SSID pick, most BSSIDs first. */
@@ -300,7 +298,7 @@ function apGroups(bssids: string[]): ApGroup[] {
       const info = bss[list[0]];
       return {
         key,
-        label: info.apName ?? info.bssid.slice(0, 16) + "x",
+        label: apName(info),
         bssids: list,
         ssids: [...new Set(list.map((b) => ssidLabel(bss[b])))],
         channels: [...new Set(list.map((b) => bss[b].channel))].sort((a, b) => a - b),
@@ -548,12 +546,8 @@ function classOf(v: number): number {
   return i < 0 ? 4 : i;
 }
 
-/** Class index → its signal colour; or any CSS custom property by name. */
-function classColor(i: number | string): string {
-  return getComputedStyle(document.documentElement)
-    .getPropertyValue(typeof i === "number" ? CLASS_VARS[i] : i)
-    .trim();
-}
+/** Class index → its signal colour. */
+const classColor = (i: number) => cssVar(CLASS_VARS[i]);
 
 export function render() {
   if (!active) return;
@@ -594,10 +588,7 @@ function renderStatus() {
   }
   el.hidden = !html;
   el.classList.toggle("err", err);
-  if (el.dataset.html !== html) {
-    keepFocus(el, ["data-st"], () => (el.innerHTML = html));
-    el.dataset.html = html;
-  }
+  setHtml(el, html, ["data-st"]);
 }
 
 function heatmap(samples: Sample[], w: number, h: number): HTMLCanvasElement | null {
@@ -674,7 +665,7 @@ function draw() {
 
 /** On-screen size of map labels and marks (--map-label in styles.css). */
 function mapScale(): number {
-  return (parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--map-label")) || 11) / 11;
+  return (parseFloat(cssVar("--map-label")) || 11) / 11;
 }
 
 /** Height the plan fits into: the canvas minus a strip at the bottom for the legend, so at "fit" it never covers points. */
@@ -814,7 +805,7 @@ function paint(ctx: CanvasRenderingContext2D, ch: number, v: typeof view, baseW:
       ctx.beginPath();
       ctx.arc(x, y, (POINT_R + 5) * k, 0, Math.PI * 2);
       ctx.lineWidth = 3 * k;
-      ctx.strokeStyle = classColor(failed ? "--danger" : "--accent");
+      ctx.strokeStyle = cssVar(failed ? "--danger" : "--accent");
       ctx.setLineDash(isMeasuring ? [5, 3] : []);
       ctx.stroke();
       ctx.setLineDash([]);
@@ -825,7 +816,7 @@ function paint(ctx: CanvasRenderingContext2D, ch: number, v: typeof view, baseW:
   // calibration line
   if (live && calib?.a) {
     const a = { x: v.x + calib.a.x * v.w, y: v.y + calib.a.y * v.h };
-    ctx.fillStyle = ctx.strokeStyle = classColor("--accent");
+    ctx.fillStyle = ctx.strokeStyle = cssVar("--accent");
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(a.x, a.y, 4, 0, Math.PI * 2);
@@ -962,9 +953,7 @@ function renderSide() {
   $("sv-band")
     .querySelectorAll<HTMLButtonElement>("button")
     .forEach((b) => {
-      const on = (b.dataset.band || null) === sel.band;
-      b.classList.toggle("on", on);
-      b.setAttribute("aria-pressed", String(on));
+      setOn(b, (b.dataset.band || null) === sel.band);
       b.disabled = !b.dataset.band && metric === "channel";
     });
   $("sv-band-hint").hidden = metric !== "channel";
@@ -1144,9 +1133,7 @@ function zoomCentre(factor: number) {
 
 function setHand(on: boolean) {
   hand = on;
-  const b = $("sv-hand");
-  b.classList.toggle("on", on);
-  b.setAttribute("aria-pressed", String(on));
+  setOn($("sv-hand"), on);
   canvas().style.cursor = on ? "grab" : "crosshair";
 }
 
@@ -1208,6 +1195,12 @@ function flashStatus() {
   $("sv-status").animate?.([{ transform: "translateX(-50%) scale(1.06)" }, { transform: "translateX(-50%) scale(1)" }], { duration: 220, easing: "cubic-bezier(0.16, 1, 0.3, 1)" });
 }
 
+function cancelCalib() {
+  calib = null;
+  host.status("");
+  render();
+}
+
 function applyScale() {
   const input = $<HTMLInputElement>("sv-scale-m");
   const m = Number(input.value);
@@ -1230,6 +1223,23 @@ export function setActive(on: boolean) {
 
 export async function init(h: SurveyHost) {
   host = h;
+  bindCanvas();
+  bindSidebar();
+  bindApList();
+  bindPoints();
+  bindKeys();
+  bindFiles();
+  // restore the last session
+  try {
+    const text = await api.autosaveRead();
+    if (text) loadProject(parseProject(text));
+  } catch {
+    /* no or unreadable autosave */
+  }
+}
+
+/** The map: click to measure, drag points / APs / the view, wheel to pan and zoom, hover tooltips. */
+function bindCanvas() {
   const cv = canvas();
   const tip = $("sv-tip");
 
@@ -1320,20 +1330,18 @@ export async function init(h: SurveyHost) {
     }
     tip.innerHTML = tooltip(hh);
     tip.hidden = false;
-    tip.style.left = `${Math.min(e.offsetX + 14, cv.clientWidth - tip.offsetWidth - 6)}px`;
-    tip.style.top = `${Math.max(4, e.offsetY - tip.offsetHeight - 10)}px`;
+    placeTip(tip, e, cv.clientWidth);
   };
   cv.onmouseleave = () => (tip.hidden = true);
   new ResizeObserver(() => draw()).observe(cv.parentElement!);
+}
 
+/** Sidebar width, zoom buttons, layer picks, display sliders, scale calibration. */
+function bindSidebar() {
   // sidebar width: drag the splitter, double-click to reset (persisted per machine)
   const surveyEl = $("survey");
   const setSide = (w: string | null) => (w ? surveyEl.style.setProperty("--side", w) : surveyEl.style.removeProperty("--side"));
-  try {
-    setSide(localStorage.getItem("wifisight.svSide"));
-  } catch {
-    /* default width */
-  }
+  setSide(load("wifisight.svSide"));
   const split = $("sv-splitter");
   split.onpointerdown = (e) => {
     e.preventDefault();
@@ -1342,20 +1350,12 @@ export async function init(h: SurveyHost) {
     split.onpointermove = (ev) => setSide(`${Math.round(Math.max(260, Math.min(rect.width - 320, rect.right - ev.clientX)))}px`);
     split.onpointerup = () => {
       split.onpointermove = null;
-      try {
-        localStorage.setItem("wifisight.svSide", surveyEl.style.getPropertyValue("--side"));
-      } catch {
-        /* storage unavailable */
-      }
+      save("wifisight.svSide", surveyEl.style.getPropertyValue("--side"));
     };
   };
   split.ondblclick = () => {
     setSide(null);
-    try {
-      localStorage.removeItem("wifisight.svSide");
-    } catch {
-      /* storage unavailable */
-    }
+    save("wifisight.svSide", null);
   };
   $("sv-zoom-in").onclick = () => zoomCentre(1.5);
   $("sv-hand").onclick = () => setHand(!hand);
@@ -1429,18 +1429,8 @@ export async function init(h: SurveyHost) {
   };
 
   const beepBox = $<HTMLInputElement>("sv-beep");
-  try {
-    beepBox.checked = localStorage.getItem("wifisight.beep") === "1";
-  } catch {
-    /* storage unavailable */
-  }
-  beepBox.onchange = () => {
-    try {
-      localStorage.setItem("wifisight.beep", beepBox.checked ? "1" : "0");
-    } catch {
-      /* storage unavailable */
-    }
-  };
+  beepBox.checked = load("wifisight.beep") === "1";
+  beepBox.onchange = () => save("wifisight.beep", beepBox.checked ? "1" : "0");
 
   // scale calibration
   $("sv-scale-set").onclick = () => {
@@ -1450,31 +1440,23 @@ export async function init(h: SurveyHost) {
     render();
   };
   $("sv-scale-ok").onclick = applyScale;
-  $("sv-scale-cancel").onclick = () => {
-    calib = null;
-    render();
-  };
+  $("sv-scale-cancel").onclick = cancelCalib;
   $("sv-scale-m").onkeydown = (e) => {
     if (e.key === "Enter") applyScale();
   };
   $<HTMLInputElement>("sv-scale-m").oninput = (e) => (e.target as HTMLInputElement).setCustomValidity("");
+}
 
+function bindApList() {
   // AP list: click header = sort, Columns ▾ / right-click header = show/hide columns
   try {
-    const saved = JSON.parse(localStorage.getItem(AP_VIEW_KEY) ?? "null");
+    const saved = JSON.parse(load(AP_VIEW_KEY) ?? "null");
     if (saved?.sort) apView = saved;
   } catch {
     /* default view */
   }
   const colPop = $("sv-col-pop");
-  const openCols = (x: number, y: number) => {
-    colPop.innerHTML = AP_COLS.slice(1)
-      .map((c) => `<label class="check"><input type="checkbox" data-col="${c.key}"${apView.hidden.includes(c.key) ? "" : " checked"} /> ${c.label}</label>`)
-      .join("");
-    colPop.style.left = `${Math.min(x, innerWidth - 180)}px`;
-    colPop.style.top = `${y}px`;
-    colPop.hidden = false;
-  };
+  const openCols = (x: number, y: number) => openColumnPicker(colPop, AP_COLS.slice(1), apView.hidden, x, y);
   $("sv-ap-cols").onclick = (e) => {
     e.stopPropagation();
     const r = (e.target as HTMLElement).getBoundingClientRect();
@@ -1518,6 +1500,10 @@ export async function init(h: SurveyHost) {
     sel = { ...sel, ap: sel.ap === tr.dataset.ap ? null : tr.dataset.ap!, bssid: null };
     render();
   };
+}
+
+/** Points list, the status banner over the map and the Undo toast. */
+function bindPoints() {
   $("sv-points").onclick = (e) => {
     const t = e.target as HTMLElement;
     const pt = (id?: string) => project?.points.find((p) => p.id === id);
@@ -1541,9 +1527,7 @@ export async function init(h: SurveyHost) {
       host.ensureRunning();
       render();
     } else if (act === "calib-cancel") {
-      calib = null;
-      host.status("");
-      render();
+      cancelCalib();
     } else if (act === "retry" && stalled) {
       const p = project?.points.find((q) => q.id === stalled!.id);
       if (p) measure(p, !p.scans);
@@ -1554,7 +1538,9 @@ export async function init(h: SurveyHost) {
   $("sv-toast").onclick = (e) => {
     if ((e.target as HTMLElement).closest("[data-undo]")) undoLast();
   };
+}
 
+function bindKeys() {
   document.addEventListener("keydown", (e) => {
     const t = e.target as HTMLElement;
     if (!active || !project || t.matches("input, select, textarea") || document.querySelector("dialog[open]")) return;
@@ -1565,11 +1551,7 @@ export async function init(h: SurveyHost) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === "Escape") {
       if (measuring) return cancelMeasure();
-      if (calib) {
-        calib = null;
-        host.status("");
-        return render();
-      }
+      if (calib) return cancelCalib();
       if (stalled) {
         stalled = null;
         return render();
@@ -1595,7 +1577,9 @@ export async function init(h: SurveyHost) {
       deletePoint(selectedPoint);
     }
   });
+}
 
+function bindFiles() {
   // floor plan / project files
   $("sv-open-plan").onclick = $("sv-empty-open").onclick = () => $("sv-file-plan").click();
   $("sv-open").onclick = () => $("sv-file-proj").click();
@@ -1626,12 +1610,4 @@ export async function init(h: SurveyHost) {
     if (!project) return;
     await api.saveFile(`${project.name}.survey.json`, JSON.stringify(project), "json");
   };
-
-  // restore the last session
-  try {
-    const text = await api.autosaveRead();
-    if (text) loadProject(parseProject(text));
-  } catch {
-    /* no or unreadable autosave */
-  }
 }
