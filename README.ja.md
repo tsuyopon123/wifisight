@@ -6,12 +6,12 @@
 
 Web サイト：https://wifisight.tsuyopon.dev/ja/
 
-WiFiSight は、イベント NOC のための Wi-Fi スキャナです。
+WiFiSight はイベント NOC のための Wi-Fi スキャナです。
 会場の事前サーベイから設営後の検証、会期中の監視までを 1 つのツールでこなせます。
 
 ## 特長
 
-### BSSID ではなく AP 名で見える
+### AP 名の表示
 
 AP がビーコンで通知している AP 名を、一覧にそのまま表示します。
 「この BSSID はどの AP か」を管理画面と突き合わせる必要がなく、電波の弱い AP や不調な AP をその場で特定できます。
@@ -38,14 +38,27 @@ macOS、Windows、Linux で動き、解析は共通の `wifi-core` が行うの�
 
 ## 機能
 
-- **Scanner**：周囲の BSS を一覧表示します。SSID、BSSID、ベンダー、AP 名、チャネルと幅、RSSI、Noise、SNR、セキュリティ、PHY、NSS、最大 PHY レート、接続クライアント数、チャネル使用率、11k/v/r、国コードを確認できます。信号強度の推移、2.4/5/6 GHz のスペクトラム、チャネルごとの混雑度、全 IE のデコード結果も表示します
-- **Survey**：図面の上で現在地をクリックして計測すると、ヒートマップと AP の推定位置を描きます。結果は `*.survey.json` に保存されます
-- **外部 Probe**：別のデバイスで計測します。手順は [docs/probe.md](docs/probe.md) を参照してください
-- **CLI**：GUI と同じ解析結果を、表、JSON、JSONL ログで出力します
-- **エクスポート**：CSV と JSON に書き出せます
+- Scanner：周囲の BSS を一覧表示します。SSID、BSSID、ベンダー、AP 名、チャネルと幅、RSSI、Noise、SNR、セキュリティ、PHY、NSS、最大 PHY レート、接続クライアント数、チャネル使用率、11k/v/r、国コードを確認できます。信号強度の推移、2.4/5/6 GHz のスペクトラム、チャネルごとの混雑度、全 IE のデコード結果も表示します
+- Survey：図面の上で現在地をクリックして計測すると、ヒートマップと AP の推定位置を描きます。結果は `*.survey.json` に保存されます
+- リンクとローミングの記録：スキャンを一時停止している間も、接続中の AP を毎秒確認します。ステータスバーにリンク速度を表示し、ローミングの記録には AP が変わるたびに前後の RSSI と送信レートを残します（[下記](#リンク速度とローミング)を参照）
+- 外部 Probe：別のデバイスで計測します。手順は [docs/probe.md](docs/probe.md) を参照してください
+- CLI：GUI と同じ解析結果を、表、JSON、JSONL ログで出力します
+- エクスポート：CSV と JSON に書き出せます
 
 一覧は `band:5 !sec:open, rssi<-75` のような書き方で絞り込めます（空白が AND、カンマが OR、`!` が否定）。
 アプリ内で `?` を押すと、フィルタの構文とキーボードショートカットの一覧が出ます。
+
+### リンク速度とローミング
+
+各 OS が現在のリンクについて返す値は次のとおりです。
+
+| OS | 送信レート | 受信レート | MCS / NSS |
+|---|---|---|---|
+| Linux | ✓ | ✓ | ✓（HT/VHT/HE/EHT） |
+| macOS | ✓ | – | ✓（CoreWLAN の非公開 API で取得。今後の macOS で使えなくなる可能性があります） |
+| Windows | ✓ | ✓ | – |
+
+macOS と Windows 11 24H2 以降は、位置情報の許可がないと BSSID を返さないため、リンクを表示できません。Linux で Wi-Fi 7 のマルチリンク接続をしているときは、BSSID の代わりに AP MLD アドレスを表示します。
 
 ## インストール
 
@@ -61,16 +74,16 @@ macOS、Windows、Linux で動き、解析は共通の `wifi-core` が行うの�
 
 コード署名をしていないため、初回起動時に警告が出ます。
 
-- **macOS**：`.dmg` からアプリケーションフォルダにコピーして起動します。起動できないときは、システム設定 › プライバシーとセキュリティ で「このまま開く」を押してください。Homebrew なら `brew install --cask tsuyopon123/tap/wifisight` でも入ります
-- **Windows**：SmartScreen の画面で「詳細情報」→「実行」を選びます
-- **Linux**：`sudo apt install ./<ファイル名>.deb` でインストールします
+- macOS：`.dmg` からアプリケーションフォルダにコピーして起動します。起動できないときは、システム設定 › プライバシーとセキュリティ で「このまま開く」を押してください。Homebrew なら `brew install --cask tsuyopon123/tap/wifisight` でも入ります
+- Windows：SmartScreen の画面で「詳細情報」→「実行」を選びます
+- Linux：`sudo apt install ./<ファイル名>.deb` でインストールします
 
 ### アップデート
 
-起動時に新しいリリースを確認し、あればステータスバーの版の隣に「vX available」と表示します。勝手に更新はしません。
+起動時に新しいリリースを確認し、あればステータスバーのバージョンの隣に「vX available」と表示します。勝手に更新はしません。
 更新するには、設定 › Updates の「Check for updates」を押します。ダウンロードとインストールのあと、アプリを再起動します（Linux では `.deb` のインストールにパスワードを求められます）。
 起動時の確認が不要なら、同じ場所の「Check on launch」をオフにしてください。
-通常は正式版（`v0.1.1` のように後ろに何も付かない版）だけを対象にします。beta も受け取るなら、同じ場所の「Include beta releases」をオンにしてください。`-portable.exe` では更新せずに Releases ページを開きます。
+通常は正式版（`v0.1.1` のように後ろに何も付かないバージョン）だけを対象にします。beta も受け取るなら、同じ場所の「Include beta releases」をオンにしてください。`-portable.exe` では更新せずに Releases ページを開きます。
 
 ### 権限
 
@@ -84,7 +97,7 @@ macOS、Windows、Linux で動き、解析は共通の `wifi-core` が行うの�
 
 ## CLI
 
-`wifisight-cli` は、同じリリースページに別ファイルとして置いています。
+`wifisight-cli` は同じリリースページに別ファイルとして置いています。
 `linux-x86_64`、`linux-aarch64`（Raspberry Pi など）、`macos-universal`、`windows-x86_64` 向けがあります。
 `.tar.gz` を展開し（Windows 版は `.exe` のまま）、`PATH` の通った場所に置いてください。
 
@@ -99,7 +112,7 @@ Rust（stable）があれば、ソースからもインストールできます�
 cargo install --git https://github.com/tsuyopon123/wifisight wifi-cli
 ```
 
-主なコマンド：
+主なコマンドは次のとおりです。
 
 ```sh
 wifisight-cli interfaces
@@ -107,10 +120,11 @@ wifisight-cli scan                # 表で表示
 wifisight-cli scan --json         # 解析済みの JSON
 wifisight-cli scan --raw          # OS から取得した生データ（IE は hex）
 wifisight-cli watch --interval 5 -o survey.jsonl
+wifisight-cli link                # 現在のリンク（BSSID、レート、MCS）を JSON で表示
 wifisight-cli serve               # 外部 Probe として :8737 で待ち受け
 ```
 
-`--raw` の出力は、不具合報告や `wifi-core` のテストデータに使えます。
+`--raw` の出力は不具合報告や `wifi-core` のテストデータに使えます。
 
 Linux で外部 Probe にするなら、同じページの `wifisight-probe_<バージョン>_<amd64|arm64>.deb` を入れると、CLI と、起動時に `serve` を動かす systemd のサービスが入ります。詳しくは [docs/probe.md](docs/probe.md) を見てください。
 

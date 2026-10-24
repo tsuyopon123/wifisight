@@ -71,7 +71,7 @@
           <div class="tile">
             <h3>AP&nbsp;ホスト名をそのまま表示</h3>
             <p>AP がビーコンで通知しているホスト名を、一覧にそのまま表示します。BSSID を管理画面と突き合わせなくても、電波の弱い AP や調子の悪い AP がその場で分かります。多くの業務用 AP ベンダーの形式に対応しています。</p>
-            <p class="fine">AP&nbsp;ホスト名は、コントローラ側で通知を有効にしたときだけビーコンに載ります（Aruba の <code>advertise-ap-name</code> など）。</p>
+            <p class="fine">AP&nbsp;ホスト名はコントローラや AP 側で通知を有効にしたときだけビーコンに載ります（Aruba の <code>advertise-ap-name</code> など）。</p>
           </div>
           <div class="tile">
             <h3>計測は Probe&nbsp;にお任せ</h3>
@@ -119,15 +119,15 @@
     <section class="section alt">
       <div class="wrap">
         <h2>ローミング</h2>
-        <p class="sub">接続中の AP を毎秒確認し、切り替わるたびに前後の RSSI と通信レートを記録します。スキャンを止めている間も確認は続きます。</p>
+        <p class="sub">接続中の AP を毎秒確認し、切り替わるたびに前後の RSSI と送信レートを記録します。スキャンを止めている間も確認は続きます。</p>
       </div>
-      <figure class="shot narrow"><img src="../img/roaming-1x.webp" srcset="../img/roaming-1x.webp 820w, ../img/roaming.webp 1640w" sizes="(min-width: 52rem) 52rem, 100vw" width="1640" height="496" loading="lazy" alt="ローミングログ。AP-HALL-A-01 から AP-HALL-A-02、AP-HALL-B-02 を経て AP-FOYER-01 まで 3 回のローミングと、前後の RSSI と通信レート。" /></figure>
+      <figure class="shot narrow"><img src="../img/roaming-1x.webp" srcset="../img/roaming-1x.webp 820w, ../img/roaming.webp 1640w" sizes="(min-width: 52rem) 52rem, 100vw" width="1640" height="496" loading="lazy" alt="ローミングログ。AP-HALL-A-01 から AP-HALL-A-02、AP-HALL-B-02 を経て AP-FOYER-01 まで 3 回のローミングと、前後の RSSI と送信レート。" /></figure>
     </section>
 
     <section class="section dark">
       <div class="wrap">
         <h2>コマンドライン</h2>
-        <p class="sub"><code>wifisight-cli</code> は、GUI と同じ解析結果を表、JSON、JSONL ログで出力します。外部 Probe もこれで動かします。Linux（x86_64、arm64）、macOS、Windows 用があります。</p>
+        <p class="sub"><code>wifisight-cli</code> は GUI と同じ解析結果を表、JSON、JSONL ログで出力します。外部 Probe もこれで動かします。Linux（x86_64、arm64）、macOS、Windows 用があります。</p>
       </div>
 <pre><code><span class="p">$</span> wifisight-cli scan
 SSID                     BSSID             BAND   CH  CTR WIDTH RSSI SECURITY             PHY        MAXRATE  STA  UTIL  VENDOR / AP
@@ -147,11 +147,11 @@ HOTEL_GUEST              1c:b1:7f:30:00:03  2.4    1    1    20  -88 Open       
         <h2>よくある質問</h2>
         <dl class="faq">
           <dt>どんなツールですか？</dt>
-          <dd>WiFiSight は、Wi-Fi スキャナ（Wi-Fi アナライザー）と現場調査（サイトサーベイ）のヒートマップを 1 つにまとめた無料のツールです。周囲のアクセスポイントの一覧、IE のデコード、チャネル使用率、信号強度の推移、ローミングログを、macOS、Windows、Linux の同じ画面で確認できます。</dd>
+          <dd>WiFiSight は Wi-Fi スキャナ（Wi-Fi アナライザー）と現場調査（サイトサーベイ）のヒートマップを 1 つにまとめた無料のツールです。周囲のアクセスポイントの一覧、IE のデコード、チャネル使用率、信号強度の推移、ローミングログを、macOS、Windows、Linux の同じ画面で確認できます。</dd>
           <dt>無料で使えますか？</dt>
           <dd>はい。すべての機能を無料で使えます。</dd>
           <dt>AP ホスト名が表示されません。</dt>
-          <dd>AP ホスト名は、コントローラや AP 側で通知を有効にしたときだけビーコンに載ります。Aruba なら SSID ごとに <code>advertise-ap-name</code> を有効にしてください。</dd>
+          <dd>AP ホスト名はコントローラや AP 側で通知を有効にしたときだけビーコンに載ります。Aruba なら SSID ごとに <code>advertise-ap-name</code> を有効にしてください。</dd>
           <dt>SSID や BSSID が表示されません。</dt>
           <dd>macOS と Windows 11 24H2 以降では、位置情報の利用を許可する必要があります。macOS は初回起動時に許可を求められます。Windows は 設定 › プライバシーとセキュリティ › 位置情報 で「デスクトップ アプリに位置情報へのアクセスを許可する」をオンにしてください。</dd>
         </dl>
@@ -190,8 +190,8 @@ HOTEL_GUEST              1c:b1:7f:30:00:03  2.4    1    1    20  -88 Open       
           <h3>初回起動</h3>
           <p>コード署名をしていないため、初回起動時に警告が出ます。</p>
           <ul>
-            <li><strong>macOS</strong>：起動できないときは、システム設定 › プライバシーとセキュリティ で「このまま開く」を押してください。</li>
-            <li><strong>Windows</strong>：SmartScreen の画面で「詳細情報」を押し、「実行」を選びます。</li>
+            <li>macOS：起動できないときは、システム設定 › プライバシーとセキュリティ で「このまま開く」を押してください。</li>
+            <li>Windows：SmartScreen の画面で「詳細情報」を押し、「実行」を選びます。</li>
           </ul>
         </div>
         <div class="firstrun" id="os">
