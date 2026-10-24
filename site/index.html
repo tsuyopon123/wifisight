@@ -71,7 +71,7 @@
           <div class="tile">
             <h3>AP hostnames, shown as they are</h3>
             <p>WiFiSight reads the hostname each AP sends in its beacons and shows it in the list. Spot a weak or misbehaving AP on the spot, without matching BSSIDs against the controller. It understands the formats of many enterprise AP vendors.</p>
-            <p class="fine">APs send their hostname only when the controller is set to, such as Aruba's <code>advertise-ap-name</code>.</p>
+            <p class="fine">APs send their hostname only when the controller or AP is set to, such as Aruba's <code>advertise-ap-name</code>.</p>
           </div>
           <div class="tile">
             <h3>Let a probe do the measuring</h3>
@@ -119,9 +119,9 @@
     <section class="section alt">
       <div class="wrap">
         <h2>Roaming</h2>
-        <p class="sub">The connected AP is checked every second, even while scanning is paused. Each change is logged with RSSI and data rate before and after.</p>
+        <p class="sub">The connected AP is checked every second, even while scanning is paused. Each change is logged with RSSI and TX rate before and after.</p>
       </div>
-      <figure class="shot narrow"><img src="img/roaming-1x.webp" srcset="img/roaming-1x.webp 820w, img/roaming.webp 1640w" sizes="(min-width: 52rem) 52rem, 100vw" width="1640" height="496" loading="lazy" alt="Roaming log: three roams from AP-HALL-A-01 through AP-HALL-A-02 and AP-HALL-B-02 to AP-FOYER-01, each with RSSI and data rate before and after." /></figure>
+      <figure class="shot narrow"><img src="img/roaming-1x.webp" srcset="img/roaming-1x.webp 820w, img/roaming.webp 1640w" sizes="(min-width: 52rem) 52rem, 100vw" width="1640" height="496" loading="lazy" alt="Roaming log: three roams from AP-HALL-A-01 through AP-HALL-A-02 and AP-HALL-B-02 to AP-FOYER-01, each with RSSI and TX rate before and after." /></figure>
     </section>
 
     <section class="section dark">
@@ -190,8 +190,8 @@ HOTEL_GUEST              1c:b1:7f:30:00:03  2.4    1    1    20  -88 Open       
           <h3>First launch</h3>
           <p>The app isn't code-signed yet, so you'll see a warning the first time.</p>
           <ul>
-            <li><strong>macOS</strong>: if it's blocked, click Open Anyway in System Settings › Privacy &amp; Security.</li>
-            <li><strong>Windows</strong>: on the SmartScreen dialog, click More info, then Run anyway.</li>
+            <li>macOS: if it's blocked, click Open Anyway in System Settings › Privacy &amp; Security.</li>
+            <li>Windows: on the SmartScreen dialog, click More info, then Run anyway.</li>
           </ul>
         </div>
         <div class="firstrun" id="os">
