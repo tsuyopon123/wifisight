@@ -62,21 +62,58 @@ macOS と Windows 11 24H2 以降は、位置情報の許可がないと BSSID �
 
 ## インストール
 
-[Releases](https://github.com/tsuyopon123/wifisight/releases) から環境に合ったファイルをダウンロードしてください。
+### 対応 OS
 
-| OS | ファイル |
-|---|---|
-| macOS 11 以降（Apple Silicon、Intel） | `.dmg` |
-| Windows 10/11（x64） | `-setup.exe`。インストールせずに使うなら `-portable.exe`（WebView2 が必要。Windows 11 には標準で入っています） |
-| Linux（x64、arm64） | `.deb` |
+| OS | 最低バージョン | GUI | CLI | 配布形式 |
+|---|---|:-:|:-:|---|
+| macOS（Apple Silicon、Intel） | macOS 11 | ✓ | ✓ | Homebrew / `.dmg` / `.tar.gz`（CLI） |
+| Windows（x64） | Windows 10 | ✓ | ✓ | `-setup.exe` / `-portable.exe` / `.exe`（CLI） |
+| Linux（x64、arm64） | Ubuntu 22.04 / Debian 12 | ✓ | ✓ | `.deb` / `.tar.gz`（CLI） |
+| Android | – | 予定 | – | – |
 
-### 初回起動
+ファイルはすべて [Releases](https://github.com/tsuyopon123/wifisight/releases) に置いています。
+コード署名をしていないため、初回起動時に警告が出ます。対処は OS ごとに次のとおりです。
 
-コード署名をしていないため、初回起動時に警告が出ます。
+### macOS
 
-- macOS：`.dmg` からアプリケーションフォルダにコピーして起動します。起動できないときは、システム設定 › プライバシーとセキュリティ で「このまま開く」を押してください。Homebrew なら `brew install --cask tsuyopon123/tap/wifisight` でも入ります
-- Windows：SmartScreen の画面で「詳細情報」→「実行」を選びます
-- Linux：`sudo apt install ./<ファイル名>.deb` でインストールします
+Homebrew でインストールできます。
+
+```sh
+brew install --cask tsuyopon123/tap/wifisight
+```
+
+`.dmg` を使う場合は、アプリをアプリケーションフォルダにコピーして起動します。
+起動できないときは、システム設定 › プライバシーとセキュリティ で「このまま開く」を押してください。
+
+### Windows
+
+`-setup.exe` でインストールします。インストールせずに使うなら `-portable.exe` を使います（WebView2 が必要です。Windows 11 には標準で入っています）。
+SmartScreen の画面が出たら、「詳細情報」→「実行」を選びます。
+
+### Linux
+
+```sh
+sudo apt install ./<ファイル名>.deb
+```
+
+### CLI のみ
+
+`wifisight-cli` は同じリリースページに別ファイルとして置いています。
+`linux-x86_64`、`linux-aarch64`（Raspberry Pi など）、`macos-universal`、`windows-x86_64` 向けがあります。
+`.tar.gz` を展開し（Windows 版は `.exe` のまま）、`PATH` の通った場所に置いてください。
+
+```sh
+tar -xzf wifisight-cli-<バージョン>-linux-aarch64.tar.gz
+sudo mv wifisight-cli /usr/local/bin/
+```
+
+Rust（stable）があれば、ソースからもインストールできます。
+
+```sh
+cargo install --git https://github.com/tsuyopon123/wifisight wifi-cli
+```
+
+Linux で外部 Probe にするなら、同じページの `wifisight-probe_<バージョン>_<amd64|arm64>.deb` を入れると、CLI と、起動時に `serve` を動かす systemd のサービスが入ります。詳しくは [docs/probe.md](docs/probe.md) を見てください。
 
 ### アップデート
 
@@ -97,22 +134,7 @@ macOS と Windows 11 24H2 以降は、位置情報の許可がないと BSSID �
 
 ## CLI
 
-`wifisight-cli` は同じリリースページに別ファイルとして置いています。
-`linux-x86_64`、`linux-aarch64`（Raspberry Pi など）、`macos-universal`、`windows-x86_64` 向けがあります。
-`.tar.gz` を展開し（Windows 版は `.exe` のまま）、`PATH` の通った場所に置いてください。
-
-```sh
-tar -xzf wifisight-cli-<バージョン>-linux-aarch64.tar.gz
-sudo mv wifisight-cli /usr/local/bin/
-```
-
-Rust（stable）があれば、ソースからもインストールできます。
-
-```sh
-cargo install --git https://github.com/tsuyopon123/wifisight wifi-cli
-```
-
-主なコマンドは次のとおりです。
+インストールの方法は [CLI のみ](#cli-のみ) を見てください。主なコマンドは次のとおりです。
 
 ```sh
 wifisight-cli interfaces
@@ -125,8 +147,6 @@ wifisight-cli serve               # 外部 Probe として :8737 で待ち受け
 ```
 
 `--raw` の出力は不具合報告や `wifi-core` のテストデータに使えます。
-
-Linux で外部 Probe にするなら、同じページの `wifisight-probe_<バージョン>_<amd64|arm64>.deb` を入れると、CLI と、起動時に `serve` を動かす systemd のサービスが入ります。詳しくは [docs/probe.md](docs/probe.md) を見てください。
 
 ## 開発
 
