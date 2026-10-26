@@ -13,10 +13,20 @@ impl Snapshot {
         warnings: Vec<String>,
         oui: Option<&OuiDb>,
     ) -> Self {
+        // macOS can list one BSSID 2–3 times per scan with different RSSI (seen for the connected
+        // AP and hidden SSIDs); keep the strongest so each BSS gets one sample per scan.
+        let mut uniq: Vec<&RawBss> = Vec::with_capacity(raws.len());
+        for r in raws {
+            match uniq.iter_mut().find(|u| u.bssid == r.bssid) {
+                Some(u) if r.rssi_dbm > u.rssi_dbm => *u = r,
+                Some(_) => {}
+                None => uniq.push(r),
+            }
+        }
         Snapshot {
             timestamp_ms: now_ms(),
             interface,
-            bss: raws.iter().map(|r| analyze(r, oui)).collect(),
+            bss: uniq.into_iter().map(|r| analyze(r, oui)).collect(),
             warnings,
         }
     }
@@ -473,6 +483,15 @@ mod tests {
             ies,
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn duplicate_bssid() {
+        let weak = RawBss { rssi_dbm: -31, ..raw(2437, vec![]) };
+        let strong = RawBss { rssi_dbm: -27, ..raw(2437, vec![]) };
+        let s = Snapshot::new("en0".into(), &[weak, strong], vec![], None);
+        assert_eq!(s.bss.len(), 1);
+        assert_eq!(s.bss[0].rssi_dbm, -27);
     }
 
     #[test]
