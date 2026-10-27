@@ -281,9 +281,8 @@ pre code {
 .fine a {
   text-decoration: underline; /* a link inside text needs more than color */
 }
-.tile code {
-  white-space: normal; /* the brew command is longer than a narrow tile */
-  overflow-wrap: anywhere;
+.tile .cmd {
+  white-space: normal; /* the brew command is longer than a narrow tile; break only at spaces */
 }
 .tile .os {
   font-size: 0.875rem;

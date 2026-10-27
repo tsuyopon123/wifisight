@@ -162,24 +162,14 @@ HOTEL_GUEST              1c:b1:7f:30:00:03  2.4    1    1    20  -88 Open       
       <div class="wrap">
         <h2>ダウンロード</h2>
         <p class="note" hidden>最新版 <span data-version></span></p>
-        <div class="spec">
-          <table>
-            <thead><tr><th scope="col">OS</th><th scope="col">最低バージョン</th><th scope="col">GUI</th><th scope="col">CLI</th></tr></thead>
-            <tbody>
-              <tr><th scope="row">macOS</th><td>macOS 11</td><td>✓</td><td>✓</td></tr>
-              <tr><th scope="row">Windows</th><td>Windows 10</td><td>✓</td><td>✓</td></tr>
-              <tr><th scope="row">Linux</th><td>Ubuntu 22.04 / Debian 12</td><td>✓</td><td>✓</td></tr>
-              <tr><th scope="row">Android</th><td>–</td><td>予定</td><td>–</td></tr>
-            </tbody>
-          </table>
-        </div>
         <div class="tiles">
           <div class="tile">
             <h3>macOS</h3>
             <p class="os">macOS 11 以降（Apple Silicon、Intel）</p>
             <p class="get"><a class="btn" href="https://github.com/tsuyopon123/wifisight/releases/latest" data-asset="_universal.dmg">.dmg をダウンロード</a></p>
-            <p>Homebrew でもインストールできます：<code>brew install --cask tsuyopon123/tap/wifisight</code></p>
-            <p>アプリケーションフォルダにコピーして起動します。位置情報の利用を求められたら許可してください。許可しないと SSID と BSSID を取得できません。</p>
+            <p>アプリケーションフォルダにコピーして起動します。Homebrew でもインストールできます。</p>
+            <p><code class="cmd">brew install --cask tsuyopon123/tap/wifisight</code></p>
+            <p>位置情報の利用を求められたら許可してください。許可しないと SSID と BSSID を取得できません。</p>
           </div>
           <div class="tile">
             <h3>Windows</h3>
@@ -193,6 +183,17 @@ HOTEL_GUEST              1c:b1:7f:30:00:03  2.4    1    1    20  -88 Open       
             <p class="get"><a class="btn" href="https://github.com/tsuyopon123/wifisight/releases/latest" data-asset="_amd64.deb">.deb（x64）</a><a class="btn alt" href="https://github.com/tsuyopon123/wifisight/releases/latest" data-asset="_arm64.deb">.deb（arm64）</a></p>
             <p><code>sudo apt install ./&lt;ファイル名&gt;.deb</code> でインストールします。</p>
           </div>
+        </div>
+        <div class="spec">
+          <table>
+            <thead><tr><th scope="col">OS</th><th scope="col">GUI</th><th scope="col">CLI</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">macOS</th><td>✓</td><td>✓</td></tr>
+              <tr><th scope="row">Windows</th><td>✓</td><td>✓</td></tr>
+              <tr><th scope="row">Linux</th><td>✓</td><td>✓</td></tr>
+              <tr><th scope="row">Android</th><td>予定</td><td>–</td></tr>
+            </tbody>
+          </table>
         </div>
         <div class="links">
           <a class="chev" href="https://github.com/tsuyopon123/wifisight/releases/latest">CLI と Probe 用パッケージ（Releases）</a>

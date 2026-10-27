@@ -66,13 +66,13 @@ macOS と Windows 11 24H2 以降は、位置情報の許可がないと BSSID �
 
 | OS | 最低バージョン | GUI | CLI | 配布形式 |
 |---|---|:-:|:-:|---|
-| macOS（Apple Silicon、Intel） | macOS 11 | ✓ | ✓ | Homebrew / `.dmg` / `.tar.gz`（CLI） |
-| Windows（x64） | Windows 10 | ✓ | ✓ | `-setup.exe` / `-portable.exe` / `.exe`（CLI） |
-| Linux（x64、arm64） | Ubuntu 22.04 / Debian 12 | ✓ | ✓ | `.deb` / `.tar.gz`（CLI） |
+| macOS（Apple Silicon、Intel） | macOS 11 | ✓ | ✓ | Homebrew / `.dmg` / `wifisight-cli-*.tar.gz`（CLI） |
+| Windows（x64） | Windows 10 | ✓ | ✓ | `-setup.exe` / `-portable.exe` / `wifisight-cli-*.exe`（CLI） |
+| Linux（x64、arm64） | Ubuntu 22.04 / Debian 12 | ✓ | ✓ | `.deb` / `wifisight-cli-*.tar.gz`（CLI） / `wifisight-probe_*.deb`（Probe） |
 | Android | – | 予定 | – | – |
 
 ファイルはすべて [Releases](https://github.com/tsuyopon123/wifisight/releases) に置いています。
-コード署名をしていないため、初回起動時に警告が出ます。対処は OS ごとに次のとおりです。
+コード署名をしていないため、macOS と Windows では初回起動時に警告が出ます。対処は各 OS の節を見てください。
 
 ### macOS
 
@@ -83,7 +83,7 @@ brew install --cask tsuyopon123/tap/wifisight
 ```
 
 `.dmg` を使う場合は、アプリをアプリケーションフォルダにコピーして起動します。
-起動できないときは、システム設定 › プライバシーとセキュリティ で「このまま開く」を押してください。
+どちらの方法でも、起動できないときは、システム設定 › プライバシーとセキュリティ で「このまま開く」を押してください。
 
 ### Windows
 
@@ -95,6 +95,23 @@ SmartScreen の画面が出たら、「詳細情報」→「実行」を選び�
 ```sh
 sudo apt install ./<ファイル名>.deb
 ```
+
+### アップデート
+
+起動時に新しいリリースを確認し、あればステータスバーのバージョンの隣に「vX available」と表示します。勝手に更新はしません。
+更新するには、設定 › Updates の「Check for updates」を押します。ダウンロードとインストールのあと、アプリを再起動します（Linux では `.deb` のインストールにパスワードを求められます）。
+起動時の確認が不要なら、同じ場所の「Check on launch」をオフにしてください。
+通常は正式版（`v0.1.1` のように後ろに何も付かないバージョン）だけを対象にします。beta も受け取るなら、同じ場所の「Include beta releases」をオンにしてください。`-portable.exe` では更新せずに Releases ページを開きます。
+
+### 権限
+
+スキャン結果を取得するには、次の権限が必要です。
+
+| OS | 必要な権限 |
+|---|---|
+| macOS | 位置情報サービス。許可しないと SSID と BSSID が取得できません。初回起動時に許可を求められます。なお、CLI 単体では BSSID を取得できません |
+| Windows | Windows 11 24H2 以降は、設定 › プライバシーとセキュリティ › 位置情報 で「デスクトップ アプリに位置情報へのアクセスを許可する」をオンにします |
+| Linux | スキャンの開始に `CAP_NET_ADMIN` が必要です。`.deb` はインストール時に自動で付与します（失敗したときは `sudo setcap cap_net_admin+ep /usr/bin/wifisight` を実行してください）。権限がないときは `nmcli` 経由で再スキャンを試み、それも失敗するとキャッシュ済みの結果を表示します |
 
 ### CLI のみ
 
@@ -114,23 +131,6 @@ cargo install --git https://github.com/tsuyopon123/wifisight wifi-cli
 ```
 
 Linux で外部 Probe にするなら、同じページの `wifisight-probe_<バージョン>_<amd64|arm64>.deb` を入れると、CLI と、起動時に `serve` を動かす systemd のサービスが入ります。詳しくは [docs/probe.md](docs/probe.md) を見てください。
-
-### アップデート
-
-起動時に新しいリリースを確認し、あればステータスバーのバージョンの隣に「vX available」と表示します。勝手に更新はしません。
-更新するには、設定 › Updates の「Check for updates」を押します。ダウンロードとインストールのあと、アプリを再起動します（Linux では `.deb` のインストールにパスワードを求められます）。
-起動時の確認が不要なら、同じ場所の「Check on launch」をオフにしてください。
-通常は正式版（`v0.1.1` のように後ろに何も付かないバージョン）だけを対象にします。beta も受け取るなら、同じ場所の「Include beta releases」をオンにしてください。`-portable.exe` では更新せずに Releases ページを開きます。
-
-### 権限
-
-スキャン結果を取得するには、次の権限が必要です。
-
-| OS | 必要な権限 |
-|---|---|
-| macOS | 位置情報サービス。許可しないと SSID と BSSID が取得できません。初回起動時に許可を求められます。なお、CLI 単体では BSSID を取得できません |
-| Windows | Windows 11 24H2 以降は、設定 › プライバシーとセキュリティ › 位置情報 で「デスクトップ アプリに位置情報へのアクセスを許可する」をオンにします |
-| Linux | スキャンの開始に `CAP_NET_ADMIN` が必要です。`.deb` はインストール時に自動で付与します（失敗したときは `sudo setcap cap_net_admin+ep /usr/bin/wifisight` を実行してください）。権限がないときは `nmcli` 経由で再スキャンを試み、それも失敗するとキャッシュ済みの結果を表示します |
 
 ## CLI
 

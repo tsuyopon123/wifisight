@@ -64,13 +64,13 @@ macOS and Windows 11 24H2+ report the BSSID only with location access, so withou
 
 | OS | Minimum version | GUI | CLI | Distribution |
 |---|---|:-:|:-:|---|
-| macOS (Apple Silicon, Intel) | macOS 11 | ✓ | ✓ | Homebrew / `.dmg` / `.tar.gz` (CLI) |
-| Windows (x64) | Windows 10 | ✓ | ✓ | `-setup.exe` / `-portable.exe` / `.exe` (CLI) |
-| Linux (x64, arm64) | Ubuntu 22.04 / Debian 12 | ✓ | ✓ | `.deb` / `.tar.gz` (CLI) |
+| macOS (Apple Silicon, Intel) | macOS 11 | ✓ | ✓ | Homebrew / `.dmg` / `wifisight-cli-*.tar.gz` (CLI) |
+| Windows (x64) | Windows 10 | ✓ | ✓ | `-setup.exe` / `-portable.exe` / `wifisight-cli-*.exe` (CLI) |
+| Linux (x64, arm64) | Ubuntu 22.04 / Debian 12 | ✓ | ✓ | `.deb` / `wifisight-cli-*.tar.gz` (CLI) / `wifisight-probe_*.deb` (probe) |
 | Android | – | Planned | – | – |
 
 All files are on [Releases](https://github.com/tsuyopon123/wifisight/releases).
-The app is not code-signed, so you'll see a warning the first time. Each OS section below says what to do.
+The app is not code-signed, so macOS and Windows show a warning the first time. Each OS section below says what to do.
 
 ### macOS
 
@@ -81,7 +81,7 @@ brew install --cask tsuyopon123/tap/wifisight
 ```
 
 Or copy the app from the `.dmg` to Applications and open it.
-If it's blocked, click "Open Anyway" in System Settings › Privacy & Security.
+Either way, if it's blocked, click "Open Anyway" in System Settings › Privacy & Security.
 
 ### Windows
 
@@ -93,23 +93,6 @@ On the SmartScreen dialog, click "More info", then "Run anyway".
 ```sh
 sudo apt install ./<file>.deb
 ```
-
-### CLI only
-
-`wifisight-cli` is a separate download on the same release page, for `linux-x86_64`, `linux-aarch64` (e.g. Raspberry Pi), `macos-universal`, and `windows-x86_64`. Extract the `.tar.gz` (the Windows build is a plain `.exe`) and put the binary on your `PATH`:
-
-```sh
-tar -xzf wifisight-cli-<version>-linux-aarch64.tar.gz
-sudo mv wifisight-cli /usr/local/bin/
-```
-
-Or install from source with Rust (stable):
-
-```sh
-cargo install --git https://github.com/tsuyopon123/wifisight wifi-cli
-```
-
-For an external probe on Linux, `wifisight-probe_<version>_<amd64|arm64>.deb` on the same page installs the CLI and a systemd service that runs `serve` on boot. See [docs/probe.md](docs/probe.md) (Japanese).
 
 ### Updates
 
@@ -127,6 +110,23 @@ Scanning needs the following permissions.
 | macOS | Location Services. Without it, SSID and BSSID are unavailable. The app asks on first launch. The standalone CLI cannot get BSSIDs |
 | Windows | On Windows 11 24H2 and later, turn on Settings › Privacy & security › Location › "Let desktop apps access your location" |
 | Linux | Triggering a scan needs `CAP_NET_ADMIN`. The `.deb` grants it on install (if that fails, run `sudo setcap cap_net_admin+ep /usr/bin/wifisight`). Without it, the app asks NetworkManager (`nmcli`) to rescan, and falls back to cached results if that fails too |
+
+### CLI only
+
+`wifisight-cli` is a separate download on the same release page, for `linux-x86_64`, `linux-aarch64` (e.g. Raspberry Pi), `macos-universal`, and `windows-x86_64`. Extract the `.tar.gz` (the Windows build is a plain `.exe`) and put the binary on your `PATH`:
+
+```sh
+tar -xzf wifisight-cli-<version>-linux-aarch64.tar.gz
+sudo mv wifisight-cli /usr/local/bin/
+```
+
+Or install from source with Rust (stable):
+
+```sh
+cargo install --git https://github.com/tsuyopon123/wifisight wifi-cli
+```
+
+For an external probe on Linux, `wifisight-probe_<version>_<amd64|arm64>.deb` on the same page installs the CLI and a systemd service that runs `serve` on boot. See [docs/probe.md](docs/probe.md) (Japanese).
 
 ## CLI
 
